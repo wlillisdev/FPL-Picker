@@ -160,3 +160,29 @@ def score_players(data, horizon=5):
 
     players.sort(key=lambda p: p.score, reverse=True)
     return players
+
+
+def apply_overrides(players, overrides):
+    """Apply manual score multipliers from scouting intel the model can't see.
+
+    ``overrides`` maps player names (case-insensitive web_name match) to
+    multipliers, e.g. {"Mbeumo": 1.15, "Szoboszlai": 0.85} for a role upgrade
+    and a role downgrade. Returns the names that matched nothing so the
+    caller can warn about typos.
+    """
+    by_name = {}
+    for p in players:
+        by_name.setdefault(p.name.lower(), []).append(p)
+
+    unmatched = []
+    for name, factor in overrides.items():
+        matches = by_name.get(name.lower(), [])
+        if not matches:
+            unmatched.append(name)
+            continue
+        for p in matches:
+            p.score = round(p.score * factor, 2)
+            p.per_gw = round(p.per_gw * factor, 2)
+
+    players.sort(key=lambda p: p.score, reverse=True)
+    return unmatched

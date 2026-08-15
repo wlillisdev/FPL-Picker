@@ -35,6 +35,19 @@ def test_fixture_multipliers_handle_blanks_and_doubles():
     assert team2[1] == 0.0
 
 
+def test_apply_overrides(snapshot):
+    players = scoring.score_players(snapshot, horizon=5)
+    target = players[0]
+    original = target.score
+    unmatched = scoring.apply_overrides(
+        players, {target.name.upper(): 0.5, "NoSuchPlayer": 1.2}
+    )
+    assert unmatched == ["NoSuchPlayer"]
+    assert target.score == round(original * 0.5, 2)
+    scores = [p.score for p in players]
+    assert scores == sorted(scores, reverse=True)  # re-sorted after applying
+
+
 def test_score_players_sorted_and_priced(snapshot):
     players = scoring.score_players(snapshot, horizon=5)
     assert len(players) == 90

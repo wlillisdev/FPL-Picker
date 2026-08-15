@@ -142,6 +142,11 @@ def main(argv=None):
         help="keep a player out of the squad (repeatable)",
     )
     parser.add_argument(
+        "--overrides", metavar="FILE",
+        help="JSON file of score multipliers for news the model can't see, "
+        'e.g. {"Mbeumo": 1.15, "Szoboszlai": 0.85}',
+    )
+    parser.add_argument(
         "--data", metavar="FILE", help="load an offline API snapshot instead of fetching"
     )
     parser.add_argument(
@@ -167,6 +172,16 @@ def main(argv=None):
     print(f"Projecting from GW{gw} over {args.horizon} gameweeks.")
 
     players = scoring.score_players(data, horizon=args.horizon)
+
+    if args.overrides:
+        import json
+
+        with open(args.overrides) as f:
+            overrides = json.load(f)
+        unmatched = scoring.apply_overrides(players, overrides)
+        print(f"Applied {len(overrides) - len(unmatched)} score override(s).")
+        for name in unmatched:
+            print(f"  warning: override {name!r} matched no player")
 
     if args.top:
         for pos in FORMATION_ORDER:
