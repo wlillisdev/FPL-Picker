@@ -47,6 +47,26 @@ python -m fpl_picker --save-data data.json # snapshot API data for offline use
 python -m fpl_picker --data data.json      # run offline from a snapshot
 ```
 
+### Rate your team and plan transfers
+
+Once the season's first deadline has passed, point it at your FPL Team ID
+(the number in the URL on the Points page at fantasy.premierleague.com):
+
+```bash
+python -m fpl_picker --team 1234567
+python -m fpl_picker --team 1234567 --free-transfers 2 --max-transfers 3
+```
+
+This rates your squad out of 100 against the perfect wildcard squad at your
+budget, shows your best XI and captain with no transfers, and evaluates
+transfer plans of increasing size with point hits priced in. A hit is only
+recommended when it clears the strategy threshold (must gain more than
+4 points plus a risk margin over the projection horizon — see
+`docs/research/02-winning-strategies.md`). Sell prices are approximated by
+current prices, since the public API doesn't expose purchase prices.
+Note `--team` fetches live data, so run it from a machine the FPL API
+doesn't block (home connections are fine; some cloud hosts are blocked).
+
 ## Tests
 
 ```bash

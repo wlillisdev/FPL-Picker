@@ -25,10 +25,21 @@ class Selection:
     projected_points: float  # XI + captain double, over the horizon
 
 
-def pick_team(players, budget=100.0, bench_weight=0.1, locked=(), excluded=()):
+def pick_team(
+    players,
+    budget=100.0,
+    bench_weight=0.1,
+    locked=(),
+    excluded=(),
+    current_ids=None,
+    max_transfers=None,
+):
     """Pick the optimal legal squad from a list of scored Players.
 
     ``locked``/``excluded`` are collections of player ids to force in or out.
+    When ``current_ids`` (an existing 15-man squad) and ``max_transfers`` are
+    given, the solver may swap at most that many players out of the current
+    squad — this is the transfer-planning mode.
     Raises ValueError if the problem is infeasible (e.g. budget too small).
     """
     locked = set(locked)
@@ -70,6 +81,10 @@ def pick_team(players, budget=100.0, bench_weight=0.1, locked=(), excluded=()):
         prob += captain[p.id] <= starter[p.id]
         if p.id in locked:
             prob += in_squad[p.id] == 1
+
+    if current_ids is not None and max_transfers is not None:
+        keep = [in_squad[pid] for pid in current_ids if pid in in_squad]
+        prob += pulp.lpSum(keep) >= 15 - max_transfers
 
     status = prob.solve(pulp.PULP_CBC_CMD(msg=False))
     if pulp.LpStatus[status] != "Optimal":

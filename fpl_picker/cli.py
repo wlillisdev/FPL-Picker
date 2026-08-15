@@ -3,8 +3,11 @@
 import argparse
 import sys
 
+import requests
+
 from . import api, scoring
 from .optimizer import pick_team
+from .transfers import evaluate_team
 
 FORMATION_ORDER = ["GK", "DEF", "MID", "FWD"]
 
@@ -60,6 +63,49 @@ def print_selection(selection, horizon):
     print(f"Captain: {selection.captain.name}   Vice: {selection.vice_captain.name}")
 
 
+def print_team_report(report, horizon, free_transfers):
+    print(f"\n=== Rate my team: {report.rating}/100 ===")
+    print(
+        f"Your squad projects {report.baseline.projected_points:.1f} pts over the "
+        f"next {horizon} GWs (best XI, captain doubled);\n"
+        f"a perfect wildcard squad at the same budget projects "
+        f"{report.optimal.projected_points:.1f}."
+    )
+
+    print("\n=== Best XI from your current squad (no transfers) ===")
+    print_selection(report.baseline, horizon)
+
+    print("\n=== Transfer options ===")
+    print(f"  (assuming {free_transfers} free transfer(s); hits cost 4 pts)")
+    for plan in report.plans:
+        if plan.n_transfers == 0:
+            print("  No beneficial transfer found at this size.")
+            continue
+        moves = ", ".join(
+            f"{o.name} → {i.name}"
+            for o, i in zip(plan.players_out, plan.players_in)
+        )
+        hit = f", -{plan.hit_cost} hit" if plan.hit_cost else ""
+        print(
+            f"  {plan.n_transfers} transfer(s): {moves}  "
+            f"(net {plan.net_gain:+.1f} pts over {horizon} GWs{hit})"
+        )
+
+    if report.recommended:
+        plan = report.recommended
+        moves = "; ".join(
+            f"OUT {o.name} ({o.team}) → IN {i.name} ({i.team})"
+            for o, i in zip(plan.players_out, plan.players_in)
+        )
+        print(f"\nRecommendation: {moves}  [net {plan.net_gain:+.1f} pts]")
+    else:
+        print(
+            "\nRecommendation: hold your transfers — no move clears the "
+            "strategy threshold this week (free moves must gain, hits must "
+            "gain > 4 + margin)."
+        )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="fpl-picker", description="AI-assisted FPL team picker"
@@ -73,6 +119,19 @@ def main(argv=None):
         type=float,
         default=0.1,
         help="weight given to bench players' points in the objective",
+    )
+    parser.add_argument(
+        "--team", type=int, metavar="TEAM_ID",
+        help="your FPL team ID: rate the squad and suggest transfers instead "
+        "of picking from scratch",
+    )
+    parser.add_argument(
+        "--free-transfers", type=int, default=1, metavar="N",
+        help="free transfers available this week (default 1)",
+    )
+    parser.add_argument(
+        "--max-transfers", type=int, default=2, metavar="N",
+        help="largest number of transfers to consider (default 2)",
     )
     parser.add_argument(
         "--lock", action="append", default=[], metavar="NAME",
@@ -114,6 +173,37 @@ def main(argv=None):
             print(f"\n--- Top {args.top} {pos} ---")
             for p in [x for x in players if x.position == pos][: args.top]:
                 print(format_player(p))
+
+    if args.team:
+        try:
+            team = api.fetch_team(args.team, data["bootstrap"])
+        except ValueError as exc:
+            sys.exit(f"error: {exc}")
+        except requests.RequestException as exc:
+            sys.exit(
+                f"error: could not fetch team {args.team} from the FPL API "
+                f"({exc}). Note: --team needs direct API access, so run it "
+                "from a machine the FPL API doesn't block."
+            )
+        name = (
+            f"{team['entry'].get('player_first_name', '')} "
+            f"{team['entry'].get('player_last_name', '')}"
+        ).strip()
+        print(
+            f"\nTeam: {team['entry'].get('name', args.team)}"
+            + (f" ({name})" if name else "")
+            + f"   Bank: £{team['bank']:.1f}m   Picks from GW{team['event']}"
+        )
+        report = evaluate_team(
+            players,
+            team["picks"],
+            bank=team["bank"],
+            free_transfers=args.free_transfers,
+            max_transfers=args.max_transfers,
+            bench_weight=args.bench_weight,
+        )
+        print_team_report(report, args.horizon, args.free_transfers)
+        return
 
     selection = pick_team(
         players,
