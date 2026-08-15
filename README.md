@@ -1,0 +1,63 @@
+# FPL-Picker
+
+AI-assisted Fantasy Premier League team picker. It pulls live data from the
+official FPL API, scores every player with an expected-points model, and uses
+integer-programming optimization to pick the best legal 15-man squad, starting
+XI, captain, and vice-captain.
+
+## How it works
+
+1. **Data** (`fpl_picker/api.py`) — fetches `bootstrap-static` (all players,
+   teams, gameweeks) and `fixtures` from the official FPL API at
+   `https://fantasy.premierleague.com/api/`. No login required.
+2. **Scoring** (`fpl_picker/scoring.py`) — projects expected points per player
+   over the next few gameweeks by blending:
+   - **form** (recent points per game),
+   - **season points per game**,
+   - **FPL's own `ep_next` estimate**,
+   - **underlying numbers** (expected goal involvements per 90),
+   adjusted for **availability** (injuries/suspensions, chance of playing) and
+   **fixture difficulty** over the chosen horizon, with a decay so nearer
+   gameweeks matter more. Double gameweeks count twice, blanks count zero.
+3. **Optimization** (`fpl_picker/optimizer.py`) — a single integer linear
+   program (via [PuLP](https://coin-or.github.io/pulp/)) that simultaneously
+   picks the 15-man squad, the starting XI, and the captain, maximizing
+   projected points subject to all FPL rules:
+   - £100.0m budget (configurable)
+   - 2 GK / 5 DEF / 5 MID / 3 FWD squad shape
+   - max 3 players per club
+   - legal formation for the XI (1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD)
+   - captain doubles their points; bench points are down-weighted
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+python -m fpl_picker
+```
+
+Useful options:
+
+```bash
+python -m fpl_picker --budget 100.0        # budget in £m
+python -m fpl_picker --horizon 5           # gameweeks to project over
+python -m fpl_picker --lock "Haaland" --lock "Saka"
+python -m fpl_picker --exclude "Salah"
+python -m fpl_picker --save-data data.json # snapshot API data for offline use
+python -m fpl_picker --data data.json      # run offline from a snapshot
+```
+
+## Tests
+
+```bash
+python -m pytest tests/ -q
+```
+
+Tests run fully offline against synthetic data and verify every FPL squad
+constraint (budget, positions, club limit, formation, captaincy).
+
+## Disclaimer
+
+No model wins FPL on its own — this gives you a strong, rules-legal,
+data-driven baseline squad and weekly re-picks. Injuries news, rotation, and
+your own judgement still matter.
