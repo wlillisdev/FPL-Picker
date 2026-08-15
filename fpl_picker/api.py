@@ -5,7 +5,15 @@ import json
 import requests
 
 BASE_URL = "https://fantasy.premierleague.com/api"
-HEADERS = {"User-Agent": "fpl-picker/0.1 (+https://github.com/wlillisdev/FPL-Picker)"}
+# The FPL API rejects requests from non-browser user agents on some hosts
+# (403), so present a normal browser UA.
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
 
 
 def fetch_data(timeout=30):
