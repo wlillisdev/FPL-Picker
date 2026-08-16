@@ -209,6 +209,13 @@ def main(argv=None):
 
     if args.openfpl:
         if not data.get("history"):
+            if args.with_history or "history" in data:
+                sys.exit(
+                    "error: no per-player match history exists yet — no "
+                    "matches have been played this season. The OpenFPL "
+                    "forecaster works from GW2 onward; until then run "
+                    "without --openfpl to use the built-in blend."
+                )
             sys.exit(
                 "error: --openfpl needs per-player match history in the data. "
                 "Refetch with --with-history (and --save-data to keep it), "
