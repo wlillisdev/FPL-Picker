@@ -68,9 +68,24 @@ python -m fpl_picker --data data.json --openfpl ~/OpenFPL --team 1234567
 Notes: the models need current-season match history, so this mode gives its
 best from ~GW2 onward (before that, players fall back to the built-in blend).
 `--openfpl-folds 2` trades a little accuracy for much faster loading.
-Understat-only features are currently left unfilled (accuracy degrades
-gracefully); filling them is on the roadmap, as are correction layers for
-defensive-contribution points, which post-date the models' training data.
+
+On top of the raw OpenFPL predictions, FPL-Picker applies two correction
+layers for the model's known gaps: a **minutes gate** (expected-minutes
+multiplier from recent starts — their documented weak spot) and an
+**expected defensive-contribution layer** (the 2025/26 rule their training
+data pre-dates), computed from per-match defensive stats when the API
+provides them. Add `--with-understat` when fetching to fill the
+Understat-only features (shots, key passes, xGChain, team xG/xGA/PPDA)
+that are otherwise left blank.
+
+### Captaincy
+
+Squad and team reports run the researched captaincy framework
+(`docs/research/08-captaincy.md`): a high-ownership premium is rank
+insurance, and the armband only deviates when the full trigger stack aligns.
+Set your posture with `--rank-mode protect|neutral|chase` — chasing rank
+loosens the rules toward differentials, protecting tightens them toward the
+field's pick. The reasoning is printed with every selection.
 
 ### Rate your team and plan transfers
 

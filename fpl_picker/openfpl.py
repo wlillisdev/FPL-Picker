@@ -47,24 +47,26 @@ PLAYER_STATS = {
     "player fpl bonus points": "bonus",
     "player xg": "expected_goals",
     "player xa": "expected_assists",
-    "player shots": None,
-    "player xgchain": None,
-    "player xgbuildup": None,
-    "player key passes": None,
+    # Understat-only stats: filled when --with-understat merged them into the
+    # history rows, NaN otherwise.
+    "player shots": "us_shots",
+    "player xgchain": "us_xgchain",
+    "player xgbuildup": "us_xgbuildup",
+    "player key passes": "us_key_passes",
 }
 TEAM_STATS = {
     "team goals scored": "goals_scored",
     "team goals conceded": "goals_conceded",
     "team league rank": "rank",
     "team opponent league rank": "opponent_rank",
-    "team xg": None,
-    "team xga": None,
-    "team deep": None,
-    "team deep allowed": None,
-    "team ppda att": None,
-    "team ppda def": None,
-    "team ppda allowed att": None,
-    "team ppda allowed def": None,
+    "team xg": "us_xg",
+    "team xga": "us_xga",
+    "team deep": "us_deep",
+    "team deep allowed": "us_deep_allowed",
+    "team ppda att": "us_ppda_att",
+    "team ppda def": "us_ppda_def",
+    "team ppda allowed att": "us_ppda_allowed_att",
+    "team ppda allowed def": "us_ppda_allowed_def",
 }
 POSITIONS = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
@@ -146,6 +148,14 @@ def build_samples(data, feature_names, horizon=5):
 
     start_event = next_event_id(bootstrap)
     team_logs = team_match_logs(bootstrap, fixtures)
+
+    # Merge Understat team rows (chronological, same finished matches) into
+    # the team logs by order so team us_* windows can be computed.
+    for team_id_str, us_rows in (data.get("understat_teams") or {}).items():
+        log = team_logs.get(int(team_id_str))
+        if log:
+            for row, us in zip(log, us_rows):
+                row.update({k: v for k, v in us.items() if k != "date"})
 
     upcoming = {}
     for f in fixtures:
@@ -269,9 +279,87 @@ class OpenFPLEngine:
         return samples
 
 
-def score_with_openfpl(data, openfpl_dir, horizon=5, decay=0.85, folds=5):
-    """Full pipeline: build samples, predict, aggregate to horizon scores.
+def xmins_factor(rows, recent=5):
+    """Expected-minutes multiplier from recent starts, addressing OpenFPL's
+    documented weak spot (predicting who won't play).
 
+    Uses the last ``recent`` matches: full starts (60'+) count 1.0, sub
+    appearances count by minutes share, absences count 0. Floor of 0.05 so a
+    fringe player is heavily discounted rather than erased.
+    """
+    tail = rows[-recent:]
+    if not tail:
+        return 1.0  # no evidence -> leave the prediction alone
+    total = 0.0
+    for row in tail:
+        minutes = row.get("minutes") or 0
+        total += 1.0 if minutes >= 60 else minutes / 90.0
+    return max(total / len(tail), 0.05)
+
+
+# 2025/26+ defensive-contribution rule: +2 pts for hitting the per-match
+# threshold. DEF: 10 CBIT; MID/FWD: 12 CBIT + tackles + recoveries.
+DEFCON_POINTS = 2.0
+DEFCON_THRESHOLDS = {"DEF": 10, "MID": 12, "FWD": 12}
+DEFCON_KEYS = (
+    "clearances_blocks_interceptions",
+    "tackles",
+    "recoveries",
+    "defensive_contribution",
+)
+
+
+def expected_defcon(rows, position, recent=10):
+    """Expected DefCon points per match — the rule OpenFPL's models pre-date.
+
+    Prefers the API's per-match ``defensive_contribution`` points field when
+    present; otherwise reconstructs the threshold hit-rate from raw defensive
+    stats. Returns 0.0 when the data carries neither (e.g. goalkeepers or
+    pre-2025 datasets). Hit rates are computed over started matches only and
+    are highly persistent (see docs/research/05-case-study-2025-26.md).
+    """
+    threshold = DEFCON_THRESHOLDS.get(position)
+    if threshold is None:
+        return 0.0
+    started = [r for r in rows[-recent:] if (r.get("minutes") or 0) >= 60]
+    if not started:
+        return 0.0
+
+    if any(r.get("defensive_contribution") is not None for r in started):
+        values = [float(r.get("defensive_contribution") or 0) for r in started]
+        return sum(values) / len(values)
+
+    hits = 0
+    counted = 0
+    for r in started:
+        cbit = r.get("clearances_blocks_interceptions")
+        tackles = r.get("tackles")
+        recoveries = r.get("recoveries")
+        if cbit is None and tackles is None and recoveries is None:
+            continue
+        counted += 1
+        volume = float(cbit or 0)
+        if position in ("MID", "FWD"):
+            volume += float(tackles or 0) + float(recoveries or 0)
+        if volume >= threshold:
+            hits += 1
+    return DEFCON_POINTS * hits / counted if counted else 0.0
+
+
+def score_with_openfpl(
+    data,
+    openfpl_dir,
+    horizon=5,
+    decay=0.85,
+    folds=5,
+    minutes_gate=True,
+    defcon=True,
+):
+    """Full pipeline: build samples, predict, correct, aggregate.
+
+    Corrections applied on top of the raw OpenFPL predictions:
+    - minutes gate (their documented weak spot: zeros/blanks)
+    - expected DefCon points (a rule their training data pre-dates)
     Returns ({player_id: score}, n_predicted, n_without_history). Players
     without any match history keep no score (caller falls back to the blend).
     """
@@ -282,6 +370,7 @@ def score_with_openfpl(data, openfpl_dir, horizon=5, decay=0.85, folds=5):
     engine.predict(samples)
 
     elements = {e["id"]: e for e in data["bootstrap"]["elements"]}
+    history = data.get("history") or {}
     scores = {}
     no_history = set()
     for row in samples:
@@ -290,7 +379,13 @@ def score_with_openfpl(data, openfpl_dir, horizon=5, decay=0.85, folds=5):
         if not row["_has_history"]:
             no_history.add(row["player_id"])
             continue
-        avail = availability(elements[row["player_id"]])
-        contribution = max(row["prediction"], 0.0) * avail * (decay ** row["gw_offset"])
-        scores[row["player_id"]] = scores.get(row["player_id"], 0.0) + contribution
+        pid = row["player_id"]
+        rows = history.get(str(pid)) or history.get(pid) or []
+        per_fixture = max(row["prediction"], 0.0)
+        if defcon:
+            per_fixture += expected_defcon(rows, row["position"])
+        if minutes_gate:
+            per_fixture *= xmins_factor(rows)
+        per_fixture *= availability(elements[pid])
+        scores[pid] = scores.get(pid, 0.0) + per_fixture * (decay ** row["gw_offset"])
     return scores, len(scores), len(no_history)

@@ -158,6 +158,15 @@ def main(argv=None):
         "one API call per player, takes a few minutes)",
     )
     parser.add_argument(
+        "--with-understat", action="store_true",
+        help="also fetch Understat xG data and merge it into the history "
+        "(fills the OpenFPL features that are otherwise left blank)",
+    )
+    parser.add_argument(
+        "--rank-mode", choices=["protect", "neutral", "chase"], default="neutral",
+        help="rank posture for the captaincy algorithm (default neutral)",
+    )
+    parser.add_argument(
         "--openfpl", metavar="DIR",
         help="use the OpenFPL pre-trained models from a local clone of "
         "https://github.com/daniegr/OpenFPL as the forecaster (needs match "
@@ -179,6 +188,16 @@ def main(argv=None):
     else:
         print("Fetching live data from the FPL API...")
         data = api.fetch_data(with_history=args.with_history)
+        if args.with_understat:
+            from . import understat
+
+            season_year = int(
+                (data["bootstrap"]["events"][0].get("deadline_time") or "2026")[:4]
+            )
+            print(f"Fetching Understat data for {season_year}/{season_year + 1}...")
+            us = understat.fetch_understat(season_year)
+            matched, total = understat.merge_into_snapshot(data, us)
+            print(f"Merged Understat stats for {matched}/{total} players.")
     if args.save_data:
         api.save_data(data, args.save_data)
         print(f"Saved data snapshot to {args.save_data}")
@@ -254,6 +273,7 @@ def main(argv=None):
             max_transfers=args.max_transfers,
             bench_weight=args.bench_weight,
         )
+        apply_captaincy(report.baseline, data, args.rank_mode)
         print_team_report(report, args.horizon, args.free_transfers)
         return
 
@@ -264,7 +284,22 @@ def main(argv=None):
         locked=resolve_names(args.lock, players, "lock"),
         excluded=resolve_names(args.exclude, players, "exclude"),
     )
+    apply_captaincy(selection, data, args.rank_mode)
     print_selection(selection, args.horizon)
+
+
+def apply_captaincy(selection, data, mode):
+    """Run the researched captaincy algorithm and update the selection."""
+    from .strategy import pick_captain
+
+    advice = pick_captain(selection.starting_xi, data, mode=mode)
+    if advice.captain.id != selection.captain.id:
+        selection.captain = advice.captain
+        selection.vice_captain = max(
+            (p for p in selection.starting_xi if p.id != advice.captain.id),
+            key=lambda p: p.score,
+        )
+    print(f"\nCaptaincy ({advice.mode}): {advice.reason}")
 
 
 if __name__ == "__main__":
