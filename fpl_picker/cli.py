@@ -253,6 +253,8 @@ def main(argv=None):
         for name in unmatched:
             print(f"  warning: override {name!r} matched no player")
 
+    log_predictions(players, gw, args.horizon)
+
     if args.top:
         for pos in FORMATION_ORDER:
             print(f"\n--- Top {args.top} {pos} ---")
@@ -300,6 +302,39 @@ def main(argv=None):
     )
     apply_captaincy(selection, data, args.rank_mode)
     print_selection(selection, args.horizon)
+
+
+def log_predictions(players, gw, horizon, directory="predictions"):
+    """Record this run's projections so we can score ourselves later.
+
+    Writes predictions/gw<N>.json (overwritten per run, so the file reflects
+    the last pre-deadline run). The accuracy report in Phase 4 reads these.
+    """
+    import datetime
+    import json
+    import os
+
+    try:
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"gw{gw}.json")
+        payload = {
+            "gameweek": gw,
+            "horizon": horizon,
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "players": [
+                {
+                    "id": p.id, "name": p.name, "team": p.team,
+                    "position": p.position, "price": p.price,
+                    "score": p.score, "per_gw": p.per_gw,
+                }
+                for p in players
+            ],
+        }
+        with open(path, "w") as f:
+            json.dump(payload, f)
+        print(f"Logged projections to {path} (for later accuracy scoring).")
+    except OSError as exc:
+        print(f"  warning: could not log predictions ({exc})")
 
 
 def apply_captaincy(selection, data, mode):
