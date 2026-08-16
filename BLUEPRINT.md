@@ -102,7 +102,13 @@ The features that make this a tool you run every gameweek:
   API is IP-blocked (e.g. PythonAnywhere).
 
 ### Phase 2 — Projection engine v1
-Replace the heuristic blend with the researched decomposition:
+Two-track (see [`docs/research/09-code-review-openfpl-solpaul.md`](docs/research/09-code-review-openfpl-solpaul.md)):
+**Track A — OpenFPL integration**: build the 235-feature samples builder (FPL API +
+Understat, rolling windows {1,3,5,10,38}) and run OpenFPL's MIT-licensed pre-trained
+ensembles as the base forecaster — near-commercial accuracy without training anything.
+**Track B — our correction layers on top** (where OpenFPL is provably weak): minutes
+gate, DefCon points (post-2024 rule it has never seen), 2026/27 bonus adjustments.
+Plus the original decomposition components as fallback/complement:
 - Minutes module (starts share, status flags, congestion + manual override file).
 - Team module (Elo/Dixon-Coles from results; odds when available) → P(clean sheet).
 - Attack module (opponent-adjusted npxG/xA per 90, penalty takers).
