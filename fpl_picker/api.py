@@ -16,10 +16,13 @@ HEADERS = {
 }
 
 
-def fetch_data(timeout=30):
+def fetch_data(timeout=30, with_history=False, min_minutes=1):
     """Fetch bootstrap-static and fixtures from the FPL API.
 
-    Returns a dict with keys ``bootstrap`` and ``fixtures``.
+    Returns a dict with keys ``bootstrap`` and ``fixtures`` — plus
+    ``history`` (per-player per-match logs, needed by the OpenFPL engine)
+    when ``with_history`` is set. History means one API call per player with
+    at least ``min_minutes`` season minutes, so expect a few minutes runtime.
     """
     bootstrap = requests.get(
         f"{BASE_URL}/bootstrap-static/", headers=HEADERS, timeout=timeout
@@ -27,7 +30,32 @@ def fetch_data(timeout=30):
     bootstrap.raise_for_status()
     fixtures = requests.get(f"{BASE_URL}/fixtures/", headers=HEADERS, timeout=timeout)
     fixtures.raise_for_status()
-    return {"bootstrap": bootstrap.json(), "fixtures": fixtures.json()}
+    data = {"bootstrap": bootstrap.json(), "fixtures": fixtures.json()}
+    if with_history:
+        data["history"] = fetch_history(data["bootstrap"], timeout=timeout, min_minutes=min_minutes)
+    return data
+
+
+def fetch_history(bootstrap, timeout=30, min_minutes=1):
+    """Fetch per-match history for every (played) player via element-summary."""
+    import time
+
+    history = {}
+    targets = [
+        e for e in bootstrap["elements"] if (e.get("minutes") or 0) >= min_minutes
+    ]
+    for i, element in enumerate(targets):
+        resp = requests.get(
+            f"{BASE_URL}/element-summary/{element['id']}/",
+            headers=HEADERS,
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            history[str(element["id"])] = resp.json().get("history", [])
+        if i % 50 == 49:
+            print(f"  fetched history for {i + 1}/{len(targets)} players...")
+        time.sleep(0.05)
+    return history
 
 
 def load_data(path):

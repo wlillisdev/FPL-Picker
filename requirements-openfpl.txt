@@ -1,0 +1,7 @@
+# Extra dependencies for the OpenFPL forecaster (--openfpl).
+# Also requires a local clone of https://github.com/daniegr/OpenFPL (~750MB).
+numpy>=1.24
+pandas>=2.0
+joblib>=1.3
+scikit-learn>=1.3
+xgboost>=2.0

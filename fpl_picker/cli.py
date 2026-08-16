@@ -153,6 +153,21 @@ def main(argv=None):
         "--save-data", metavar="FILE", help="save the fetched API data to a JSON file"
     )
     parser.add_argument(
+        "--with-history", action="store_true",
+        help="also fetch per-player match history (needed for --openfpl; "
+        "one API call per player, takes a few minutes)",
+    )
+    parser.add_argument(
+        "--openfpl", metavar="DIR",
+        help="use the OpenFPL pre-trained models from a local clone of "
+        "https://github.com/daniegr/OpenFPL as the forecaster (needs match "
+        "history in the data; see README)",
+    )
+    parser.add_argument(
+        "--openfpl-folds", type=int, default=5, metavar="N",
+        help="how many of OpenFPL's 5 CV folds to load (fewer = faster, default 5)",
+    )
+    parser.add_argument(
         "--top", type=int, default=0, metavar="N",
         help="also print the top N scored players per position",
     )
@@ -163,7 +178,7 @@ def main(argv=None):
         print(f"Loaded data snapshot from {args.data}")
     else:
         print("Fetching live data from the FPL API...")
-        data = api.fetch_data()
+        data = api.fetch_data(with_history=args.with_history)
     if args.save_data:
         api.save_data(data, args.save_data)
         print(f"Saved data snapshot to {args.save_data}")
@@ -172,6 +187,28 @@ def main(argv=None):
     print(f"Projecting from GW{gw} over {args.horizon} gameweeks.")
 
     players = scoring.score_players(data, horizon=args.horizon)
+
+    if args.openfpl:
+        if not data.get("history"):
+            sys.exit(
+                "error: --openfpl needs per-player match history in the data. "
+                "Refetch with --with-history (and --save-data to keep it), "
+                "e.g.: python -m fpl_picker --with-history --save-data data.json"
+            )
+        from .openfpl import score_with_openfpl
+
+        print("Running OpenFPL ensemble forecaster (this can take a minute)...")
+        scores, n_scored, n_skipped = score_with_openfpl(
+            data, args.openfpl, horizon=args.horizon, folds=args.openfpl_folds
+        )
+        for p in players:
+            if p.id in scores:
+                p.score = round(scores[p.id], 2)
+        players.sort(key=lambda p: p.score, reverse=True)
+        print(
+            f"OpenFPL scored {n_scored} players; kept the blend for "
+            f"{n_skipped} without match history."
+        )
 
     if args.overrides:
         import json
