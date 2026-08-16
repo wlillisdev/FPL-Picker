@@ -142,6 +142,11 @@ def main(argv=None):
         help="keep a player out of the squad (repeatable)",
     )
     parser.add_argument(
+        "--club-cap", action="append", default=[], metavar="TEAM:N",
+        help="cap how many players may come from one club, e.g. LEE:2 "
+        "(repeatable; FPL's own limit of 3 always applies)",
+    )
+    parser.add_argument(
         "--overrides", metavar="FILE",
         help="JSON file of score multipliers for news the model can't see, "
         'e.g. {"Mbeumo": 1.15, "Szoboszlai": 0.85}',
@@ -293,12 +298,28 @@ def main(argv=None):
         print_team_report(report, args.horizon, args.free_transfers)
         return
 
+    club_caps = {}
+    for spec in args.club_cap:
+        try:
+            team_name, cap = spec.rsplit(":", 1)
+            cap = int(cap)
+        except ValueError:
+            sys.exit(f"error: --club-cap {spec!r} should look like LEE:2")
+        matches = {
+            p.team_id for p in players if p.team.lower() == team_name.lower()
+        }
+        if not matches:
+            sys.exit(f"error: no club matches --club-cap {team_name!r} "
+                     "(use the 3-letter short name shown in the output)")
+        club_caps[matches.pop()] = cap
+
     selection = pick_team(
         players,
         budget=args.budget,
         bench_weight=args.bench_weight,
         locked=resolve_names(args.lock, players, "lock"),
         excluded=resolve_names(args.exclude, players, "exclude"),
+        club_caps=club_caps,
     )
     apply_captaincy(selection, data, args.rank_mode)
     print_selection(selection, args.horizon)

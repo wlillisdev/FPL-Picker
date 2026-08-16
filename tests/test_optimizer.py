@@ -39,6 +39,17 @@ def test_selection_obeys_all_fpl_rules(players):
     assert selection.bench[0].position == "GK"
 
 
+def test_club_cap_constrains_selection(players):
+    baseline = pick_team(players, budget=100.0)
+    clubs = Counter(p.team_id for p in baseline.squad)
+    heaviest, count = clubs.most_common(1)[0]
+    assert count >= 2  # precondition for a meaningful cap
+    capped = pick_team(players, budget=100.0, club_caps={heaviest: 1})
+    capped_clubs = Counter(p.team_id for p in capped.squad)
+    assert capped_clubs.get(heaviest, 0) <= 1
+    assert capped.projected_points <= baseline.projected_points
+
+
 def test_captain_is_best_starter(players):
     selection = pick_team(players, budget=100.0)
     best = max(selection.starting_xi, key=lambda p: p.score)

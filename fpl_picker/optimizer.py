@@ -33,6 +33,7 @@ def pick_team(
     excluded=(),
     current_ids=None,
     max_transfers=None,
+    club_caps=None,
 ):
     """Pick the optimal legal squad from a list of scored Players.
 
@@ -70,10 +71,12 @@ def pick_team(
         prob += pulp.lpSum(starter[p.id] for p in members) >= XI_MIN[position]
         prob += pulp.lpSum(starter[p.id] for p in members) <= XI_MAX[position]
 
+    club_caps = club_caps or {}
     for team_id in {p.team_id for p in pool}:
+        cap = min(MAX_PER_CLUB, club_caps.get(team_id, MAX_PER_CLUB))
         prob += (
             pulp.lpSum(in_squad[p.id] for p in pool if p.team_id == team_id)
-            <= MAX_PER_CLUB
+            <= cap
         )
 
     for p in pool:
