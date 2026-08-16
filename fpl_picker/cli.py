@@ -195,9 +195,16 @@ def main(argv=None):
                 (data["bootstrap"]["events"][0].get("deadline_time") or "2026")[:4]
             )
             print(f"Fetching Understat data for {season_year}/{season_year + 1}...")
-            us = understat.fetch_understat(season_year)
-            matched, total = understat.merge_into_snapshot(data, us)
-            print(f"Merged Understat stats for {matched}/{total} players.")
+            try:
+                us = understat.fetch_understat(season_year)
+                matched, total = understat.merge_into_snapshot(data, us)
+                print(f"Merged Understat stats for {matched}/{total} players.")
+            except Exception as exc:  # site blocked, season not published yet, format drift
+                print(
+                    f"  warning: Understat data unavailable ({exc}). This is "
+                    "normal before the season's first matches are played. "
+                    "Continuing without it — xG-ecosystem features stay blank."
+                )
     if args.save_data:
         api.save_data(data, args.save_data)
         print(f"Saved data snapshot to {args.save_data}")
