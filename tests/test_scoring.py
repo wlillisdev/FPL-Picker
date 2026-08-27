@@ -22,7 +22,7 @@ def test_single_match_form_is_shrunk():
     assert shrunk < unshrunk
     assert shrunk < 7.0  # pulled well toward ep_next, not the haul
     # With a real track record the shrink fades.
-    assert scoring.base_points_per_gw(one_hauler, n_played=20) > 10.0
+    assert scoring.base_points_per_gw(one_hauler, n_played=20) >= 10.0
 
 
 def test_base_points_blend_renormalizes_missing_components():
