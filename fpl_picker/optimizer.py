@@ -97,17 +97,60 @@ def pick_team(
         )
 
     squad = [p for p in pool if in_squad[p.id].value() == 1]
-    xi = [p for p in pool if starter[p.id].value() == 1]
-    cap = next(p for p in pool if captain[p.id].value() == 1)
-    vice = max((p for p in xi if p.id != cap.id), key=lambda p: p.score)
+    return build_selection(squad)
 
+
+def _lineup_metric(squad):
+    """Next-GW projections drive lineups when available; horizon otherwise
+    (synthetic/test players may not carry next_score)."""
+    if any(p.next_score > 0 for p in squad):
+        return lambda p: p.next_score
+    return lambda p: p.score
+
+
+def build_selection(squad):
+    """Choose XI/captain/bench from a 15-man squad by NEXT-gameweek points.
+
+    Squad composition and transfers are horizon decisions, but who starts
+    this week is a fixture-specific decision — a player facing the league's
+    best attack next match should be benchable even if his 5-week run is
+    good, and a blank-gameweek player (next_score 0) benches automatically.
+    Exact search over legal formations (1 GK, 3-5 DEF, 2-5 MID, 1-3 FWD).
+    """
+    metric = _lineup_metric(squad)
+    by_pos = {pos: [] for pos in SQUAD_SHAPE}
+    for p in squad:
+        by_pos[p.position].append(p)
+    for pos in by_pos:
+        by_pos[pos].sort(key=metric, reverse=True)
+
+    best_xi, best_value = None, None
+    for n_def in range(XI_MIN["DEF"], XI_MAX["DEF"] + 1):
+        for n_mid in range(XI_MIN["MID"], XI_MAX["MID"] + 1):
+            n_fwd = 10 - n_def - n_mid
+            if not (XI_MIN["FWD"] <= n_fwd <= XI_MAX["FWD"]):
+                continue
+            xi = (
+                by_pos["GK"][:1]
+                + by_pos["DEF"][:n_def]
+                + by_pos["MID"][:n_mid]
+                + by_pos["FWD"][:n_fwd]
+            )
+            value = sum(metric(p) for p in xi)
+            if best_value is None or value > best_value:
+                best_xi, best_value = xi, value
+
+    xi = best_xi
+    cap = max(xi, key=metric)
+    vice = max((p for p in xi if p.id != cap.id), key=metric)
     bench = [p for p in squad if p not in xi]
-    bench.sort(key=lambda p: (p.position != "GK", -p.score))
+    bench.sort(key=lambda p: (p.position != "GK", -metric(p)))
 
     return Selection(
         squad=squad,
         starting_xi=sorted(
-            xi, key=lambda p: (["GK", "DEF", "MID", "FWD"].index(p.position), -p.score)
+            xi,
+            key=lambda p: (["GK", "DEF", "MID", "FWD"].index(p.position), -metric(p)),
         ),
         bench=bench,
         captain=cap,

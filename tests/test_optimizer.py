@@ -50,10 +50,26 @@ def test_club_cap_constrains_selection(players):
     assert capped.projected_points <= baseline.projected_points
 
 
-def test_captain_is_best_starter(players):
+def test_captain_is_best_starter_next_gw(players):
     selection = pick_team(players, budget=100.0)
-    best = max(selection.starting_xi, key=lambda p: p.score)
+    # Lineup decisions are next-gameweek driven when projections exist.
+    best = max(selection.starting_xi, key=lambda p: p.next_score)
     assert selection.captain.id == best.id
+
+
+def test_bad_next_fixture_player_is_benched(players):
+    from fpl_picker.optimizer import build_selection
+
+    selection = pick_team(players, budget=100.0)
+    squad = selection.squad
+    # Give one current starter a blank/terrible next fixture: he must drop
+    # out of the XI even though his horizon score is unchanged.
+    victim = max(selection.starting_xi, key=lambda p: p.next_score)
+    original = victim.next_score
+    victim.next_score = 0.0
+    reselected = build_selection(squad)
+    assert victim.id not in {p.id for p in reselected.starting_xi}
+    victim.next_score = original
 
 
 def test_lock_and_exclude(players):

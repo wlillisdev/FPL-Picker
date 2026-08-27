@@ -69,10 +69,16 @@ def pick_captain(starting_xi, data, mode="neutral"):
     ``mode`` is the rank posture: protect | neutral | chase.
     Returns CaptainAdvice; the Selection's captain can be overridden with it.
     """
-    pool = sorted(starting_xi, key=lambda p: p.score, reverse=True)
+    # Captaincy is a next-gameweek decision: use the fixture-specific
+    # projection when available, horizon score otherwise.
+    if any(p.next_score > 0 for p in starting_xi):
+        metric = lambda p: p.next_score  # noqa: E731
+    else:
+        metric = lambda p: p.score  # noqa: E731
+    pool = sorted(starting_xi, key=metric, reverse=True)
     best = pool[0]
     default = max(pool, key=_eo_proxy)
-    best_leads_by = best.score - default.score
+    best_leads_by = metric(best) - metric(default)
 
     if mode == "protect":
         if best_leads_by >= STAY_GAP:
@@ -91,10 +97,10 @@ def pick_captain(starting_xi, data, mode="neutral"):
         diffs = [
             p for p in pool
             if _eo_proxy(p) < EO_DIFFERENTIAL
-            and default.score - p.score <= STAY_GAP
+            and metric(default) - metric(p) <= STAY_GAP
         ]
         if diffs:
-            punt = max(diffs, key=lambda p: p.score)
+            punt = max(diffs, key=metric)
             return CaptainAdvice(
                 captain=punt, default=default, mode=mode,
                 reason=f"Chasing rank: {punt.name} is a genuine differential "
@@ -116,7 +122,7 @@ def pick_captain(starting_xi, data, mode="neutral"):
     if (
         _eo_proxy(default) > EO_DEFAULT_HIGH
         and _eo_proxy(best) < EO_DEFAULT_HIGH
-        and default.score - best.score <= DEVIATE_GAP
+        and metric(default) - metric(best) <= DEVIATE_GAP
         and _fixture_boost(best, data)
     ):
         return CaptainAdvice(

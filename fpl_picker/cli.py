@@ -236,12 +236,13 @@ def main(argv=None):
         from .openfpl import score_with_openfpl
 
         print("Running OpenFPL ensemble forecaster (this can take a minute)...")
-        scores, n_scored, n_skipped = score_with_openfpl(
+        scores, next_scores, n_scored, n_skipped = score_with_openfpl(
             data, args.openfpl, horizon=args.horizon, folds=args.openfpl_folds
         )
         for p in players:
             if p.id in scores:
                 p.score = round(scores[p.id], 2)
+                p.next_score = round(next_scores.get(p.id, 0.0), 2)
         players.sort(key=lambda p: p.score, reverse=True)
         print(
             f"OpenFPL scored {n_scored} players; kept the blend for "

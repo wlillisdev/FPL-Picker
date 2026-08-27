@@ -30,6 +30,10 @@ class Player:
     status: str
     news: str = ""
     stats: dict = field(default_factory=dict)
+    # Projected points for the NEXT gameweek only (fixture-specific; 0 for a
+    # blank). Squad/transfer decisions use the horizon `score`; lineup,
+    # bench order, and captaincy use this.
+    next_score: float = 0.0
 
 
 def _to_float(value):
@@ -165,6 +169,7 @@ def score_players(data, horizon=5):
                 price=element["now_cost"] / 10.0,
                 score=round(score, 2),
                 per_gw=round(per_gw, 2),
+                next_score=round(per_gw * (multipliers[0] if multipliers else 0.0), 2),
                 status=element.get("status", "a"),
                 news=element.get("news", "") or "",
                 stats={
@@ -202,6 +207,7 @@ def apply_overrides(players, overrides):
         for p in matches:
             p.score = round(p.score * factor, 2)
             p.per_gw = round(p.per_gw * factor, 2)
+            p.next_score = round(p.next_score * factor, 2)
 
     players.sort(key=lambda p: p.score, reverse=True)
     return unmatched

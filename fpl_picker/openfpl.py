@@ -370,7 +370,8 @@ def score_with_openfpl(
       mean and the models extrapolate single-game flukes into season-long
       form — one big DefCon opener must not make a £4.0m defender the
       "best player in the game".
-    Returns ({player_id: score}, n_predicted, n_without_history).
+    Returns ({player_id: horizon score}, {player_id: next-GW score},
+    n_predicted, n_without_history).
     """
     from .scoring import availability
 
@@ -381,6 +382,7 @@ def score_with_openfpl(
     elements = {e["id"]: e for e in data["bootstrap"]["elements"]}
     history = data.get("history") or {}
     scores = {}
+    next_scores = {}
     no_history = set()
     for row in samples:
         if "prediction" not in row:
@@ -401,4 +403,6 @@ def score_with_openfpl(
             per_fixture *= xmins_factor(rows)
         per_fixture *= availability(elements[pid])
         scores[pid] = scores.get(pid, 0.0) + per_fixture * (decay ** row["gw_offset"])
-    return scores, len(scores), len(no_history)
+        if row["gw_offset"] == 0:
+            next_scores[pid] = next_scores.get(pid, 0.0) + per_fixture
+    return scores, next_scores, len(scores), len(no_history)
