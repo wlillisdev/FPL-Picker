@@ -12,17 +12,32 @@ def test_availability_flags():
 
 
 def test_single_match_form_is_shrunk():
-    # After GW1, form == ppg == the one match's score. A 13-point opener
-    # must not dominate the blend over FPL's estimate.
+    # After GW1, form == ppg == the one match's score, and even ep_next is
+    # form-derived. A 13-point opener from a 6.0m player must not dominate.
     one_hauler = {
-        "form": "13.0", "points_per_game": "13.0", "ep_next": "4.0", "minutes": 90,
+        "form": "13.0", "points_per_game": "13.0", "ep_next": "4.0",
+        "minutes": 90, "now_cost": 60,
     }
     unshrunk = scoring.base_points_per_gw(one_hauler)
     shrunk = scoring.base_points_per_gw(one_hauler, n_played=1)
     assert shrunk < unshrunk
-    assert shrunk < 7.0  # pulled well toward ep_next, not the haul
-    # With a real track record the shrink fades.
-    assert scoring.base_points_per_gw(one_hauler, n_played=20) >= 10.0
+    assert shrunk < 4.5  # anchored near the 6.0m price prior (~2.6)
+    # With a real track record the anchor fades and form dominates again.
+    assert scoring.base_points_per_gw(one_hauler, n_played=20) > 8.0
+
+
+def test_price_prior_ranks_premium_over_one_week_wonder():
+    premium_quiet = {
+        "form": "4.0", "points_per_game": "4.0", "ep_next": "5.0",
+        "minutes": 90, "now_cost": 155,
+    }
+    cheap_hauler = {
+        "form": "13.0", "points_per_game": "13.0", "ep_next": "7.0",
+        "minutes": 90, "now_cost": 60,
+    }
+    assert scoring.base_points_per_gw(
+        premium_quiet, n_played=1
+    ) > scoring.base_points_per_gw(cheap_hauler, n_played=1)
 
 
 def test_base_points_blend_renormalizes_missing_components():

@@ -80,10 +80,18 @@ def base_points_per_gw(element, n_played=None):
         (ximplied, 0.15),
     ]
     live = [(v, w) for v, w in components if v > 0]
-    if not live:
-        return 0.0
-    total_weight = sum(w for _, w in live)
-    return sum(v * w for v, w in live) / total_weight
+    current = (
+        sum(v * w for v, w in live) / sum(w for _, w in live) if live else 0.0
+    )
+    if n_played is None:
+        return current
+
+    # Anchor to a price-implied prior early in the season: FPL's price list
+    # is the only signal not contaminated by tiny samples (even ep_next is
+    # form-derived). The anchor fades as real matches accumulate.
+    price = _to_float(element.get("now_cost")) / 10.0
+    price_prior = 0.32 * price + 0.7 if price > 0 else current
+    return credibility * current + (1.0 - credibility) * price_prior
 
 
 def fixture_multipliers(fixtures, team_id, from_event, horizon):
