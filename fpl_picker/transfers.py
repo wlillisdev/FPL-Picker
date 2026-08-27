@@ -14,6 +14,9 @@ HIT_COST = 4
 # A paid transfer must beat its cost by this margin before we recommend it
 # (see docs/research/02-winning-strategies.md rule 2).
 HIT_MARGIN = 2.0
+# A free transfer spends a banked FT with real option value (~1.5 pts per
+# the community solver's calibration) — recommend only above that bar.
+FREE_MARGIN = 1.5
 
 
 @dataclass
@@ -107,8 +110,9 @@ def evaluate_team(
     for plan in plans:
         if plan.n_transfers == 0:
             continue
-        # Free moves just need to gain; paid moves must clear the margin.
-        threshold = HIT_MARGIN if plan.hit_cost else 0.0
+        # Free moves must beat the banked-FT option value; paid moves must
+        # clear the hit margin on top of the 4-point cost.
+        threshold = HIT_MARGIN if plan.hit_cost else FREE_MARGIN
         if plan.net_gain > threshold and (
             recommended is None or plan.net_gain > recommended.net_gain
         ):
