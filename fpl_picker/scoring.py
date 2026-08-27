@@ -50,13 +50,15 @@ def availability(element):
     return 1.0
 
 
-def base_points_per_gw(element):
+def base_points_per_gw(element, n_played=None):
     """Blend the available per-gameweek point signals for one player.
 
     Components with no data yet (e.g. form/ppg at season start) drop out and
-    the remaining weights are renormalized, so the model degrades gracefully
-    in early gameweeks when FPL's ``ep_next`` and underlying per-90 numbers
-    carry the estimate.
+    the remaining weights are renormalized. Early in a season form and ppg
+    are averages over one or two matches — a single haul must not read as
+    season-long form — so when ``n_played`` (matches with minutes) is known,
+    their weights are shrunk by n/(n+4) and FPL's ``ep_next`` estimate
+    carries the blend until real track records exist.
     """
     form = _to_float(element.get("form"))
     ppg = _to_float(element.get("points_per_game"))
@@ -64,14 +66,16 @@ def base_points_per_gw(element):
     xgi90 = _to_float(element.get("expected_goal_involvements_per_90"))
     minutes = element.get("minutes", 0) or 0
 
+    credibility = 1.0 if n_played is None else n_played / (n_played + 4.0)
+
     # Rough points-per-GW implied by underlying attacking involvement: a goal
     # or assist is worth ~5 points on average across positions, plus ~2 for
     # appearance. Only meaningful once the player has real minutes.
     ximplied = xgi90 * 5.0 + 2.0 if minutes >= 270 else 0.0
 
     components = [
-        (form, 0.35),
-        (ppg, 0.25),
+        (form, 0.35 * credibility),
+        (ppg, 0.25 * credibility),
         (ep_next, 0.25),
         (ximplied, 0.15),
     ]
@@ -118,6 +122,7 @@ def score_players(data, horizon=5):
     start_event = next_event_id(bootstrap)
     teams = {t["id"]: t for t in bootstrap["teams"]}
     team_fixture_cache = {}
+    history = data.get("history") or {}
 
     players = []
     for element in bootstrap["elements"]:
@@ -131,7 +136,13 @@ def score_players(data, horizon=5):
             )
         multipliers = team_fixture_cache[team_id]
 
-        per_gw = base_points_per_gw(element) * availability(element)
+        rows = history.get(str(element["id"])) or history.get(element["id"])
+        n_played = (
+            sum(1 for r in rows if (r.get("minutes") or 0) > 0)
+            if rows is not None
+            else None
+        )
+        per_gw = base_points_per_gw(element, n_played) * availability(element)
         score = sum(
             per_gw * mult * (DECAY**k) for k, mult in enumerate(multipliers)
         )

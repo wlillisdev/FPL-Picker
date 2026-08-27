@@ -11,6 +11,20 @@ def test_availability_flags():
     )
 
 
+def test_single_match_form_is_shrunk():
+    # After GW1, form == ppg == the one match's score. A 13-point opener
+    # must not dominate the blend over FPL's estimate.
+    one_hauler = {
+        "form": "13.0", "points_per_game": "13.0", "ep_next": "4.0", "minutes": 90,
+    }
+    unshrunk = scoring.base_points_per_gw(one_hauler)
+    shrunk = scoring.base_points_per_gw(one_hauler, n_played=1)
+    assert shrunk < unshrunk
+    assert shrunk < 7.0  # pulled well toward ep_next, not the haul
+    # With a real track record the shrink fades.
+    assert scoring.base_points_per_gw(one_hauler, n_played=20) > 10.0
+
+
 def test_base_points_blend_renormalizes_missing_components():
     # Early-season player: no form/ppg yet, only FPL's estimate carries.
     early = {"form": "0.0", "points_per_game": "0.0", "ep_next": "4.0", "minutes": 0}
