@@ -36,6 +36,12 @@ def test_defcon_from_api_field():
     assert expected_defcon(rows, "DEF") == pytest.approx(1.5)
 
 
+def test_defcon_single_match_is_shrunk():
+    # A perfect DefCon record over ONE match must not project full credit.
+    one = [{"minutes": 90, "defensive_contribution": 2}]
+    assert expected_defcon(one, "DEF") == pytest.approx(2.0 / 3.0)
+
+
 def test_defcon_reconstructed_from_raw_stats():
     # DEF threshold 10 CBIT: hits in 2 of 4 started matches -> 1.0 exp pts.
     rows = [
@@ -46,12 +52,12 @@ def test_defcon_reconstructed_from_raw_stats():
         {"minutes": 30, "clearances_blocks_interceptions": 12},  # not started
     ]
     assert expected_defcon(rows, "DEF") == pytest.approx(1.0)
-    # MID threshold 12 includes tackles + recoveries.
+    # MID threshold 12 includes tackles + recoveries; single match -> shrunk.
     mid_rows = [
         {"minutes": 90, "clearances_blocks_interceptions": 4, "tackles": 4,
          "recoveries": 5},
     ]
-    assert expected_defcon(mid_rows, "MID") == pytest.approx(2.0)
+    assert expected_defcon(mid_rows, "MID") == pytest.approx(2.0 / 3.0)
 
 
 def test_defcon_absent_data_is_zero():

@@ -324,10 +324,13 @@ def expected_defcon(rows, position, recent=10):
     started = [r for r in rows[-recent:] if (r.get("minutes") or 0) >= 60]
     if not started:
         return 0.0
+    # Shrink small samples toward zero: a 100% hit rate over one match is
+    # weak evidence; full credibility from 3 started matches.
+    credibility = min(len(started) / 3.0, 1.0)
 
     if any(r.get("defensive_contribution") is not None for r in started):
         values = [float(r.get("defensive_contribution") or 0) for r in started]
-        return sum(values) / len(values)
+        return credibility * sum(values) / len(values)
 
     hits = 0
     counted = 0
@@ -343,7 +346,7 @@ def expected_defcon(rows, position, recent=10):
             volume += float(tackles or 0) + float(recoveries or 0)
         if volume >= threshold:
             hits += 1
-    return DEFCON_POINTS * hits / counted if counted else 0.0
+    return credibility * DEFCON_POINTS * hits / counted if counted else 0.0
 
 
 def score_with_openfpl(
@@ -354,14 +357,20 @@ def score_with_openfpl(
     folds=5,
     minutes_gate=True,
     defcon=True,
+    min_history=4,
 ):
     """Full pipeline: build samples, predict, correct, aggregate.
 
     Corrections applied on top of the raw OpenFPL predictions:
     - minutes gate (their documented weak spot: zeros/blanks)
     - expected DefCon points (a rule their training data pre-dates)
-    Returns ({player_id: score}, n_predicted, n_without_history). Players
-    without any match history keep no score (caller falls back to the blend).
+    - reliability gate: players with fewer than ``min_history`` played
+      matches keep no OpenFPL score (caller falls back to the blend).
+      With tiny samples every rolling window collapses to the same one-match
+      mean and the models extrapolate single-game flukes into season-long
+      form — one big DefCon opener must not make a £4.0m defender the
+      "best player in the game".
+    Returns ({player_id: score}, n_predicted, n_without_history).
     """
     from .scoring import availability
 
@@ -381,6 +390,10 @@ def score_with_openfpl(
             continue
         pid = row["player_id"]
         rows = history.get(str(pid)) or history.get(pid) or []
+        played = [r for r in rows if (r.get("minutes") or 0) > 0]
+        if len(played) < min_history:
+            no_history.add(pid)
+            continue
         per_fixture = max(row["prediction"], 0.0)
         if defcon:
             per_fixture += expected_defcon(rows, row["position"])
