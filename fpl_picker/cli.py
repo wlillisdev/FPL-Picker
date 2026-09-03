@@ -185,6 +185,10 @@ def main(argv=None):
         "--top", type=int, default=0, metavar="N",
         help="also print the top N scored players per position",
     )
+    parser.add_argument(
+        "--accuracy", action="store_true",
+        help="score all logged predictions against actual results and exit",
+    )
     args = parser.parse_args(argv)
 
     if args.data:
@@ -213,6 +217,14 @@ def main(argv=None):
     if args.save_data:
         api.save_data(data, args.save_data)
         print(f"Saved data snapshot to {args.save_data}")
+
+    if args.accuracy:
+        from .report import print_accuracy_report
+
+        if not data.get("history"):
+            sys.exit("error: --accuracy needs match history (fetch with --with-history)")
+        print_accuracy_report(data)
+        return
 
     gw = api.next_event_id(data["bootstrap"])
     print(f"Projecting from GW{gw} over {args.horizon} gameweeks.")
