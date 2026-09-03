@@ -1,4 +1,55 @@
-# FPL-Picker System Audit (v0.2, post-Phase 1)
+# FPL-Picker System Audit
+
+## v0.3 — Two weeks live (2026-09, after GW1-2 in production)
+
+The first audit below was written before contact with reality. This section is
+the retrospective after two live gameweeks. Verdict up front: **the ranking
+layer is provably good, the selection layer shipped over-trusting and needed
+three emergency fixes, and the biggest unexploited asset is last-season data
+we still don't use.**
+
+### What the live evidence proved GOOD
+- **Ranking accuracy (the measured thing):** beat the price-only baseline in
+  both scored gameweeks (MAE 1.79 vs 2.25; 1.49 vs 2.13), and GW2's top-10
+  rated players went **10/10 for returns** (incl. rating Palmer and Saka
+  top-5 *before* their hauls). The core signal works.
+- **The discipline layer:** refused hits below threshold, recommended holds,
+  banked FTs — every strategy-rule behavior fired correctly.
+- **The audit loop itself:** every user-visible failure produced a same-day
+  fix with a regression test (6 fixes, 43 tests). Failures don't recur.
+
+### What the live evidence proved BAD
+1. **Selection-layer defaults trusted tiny samples.** Three absurd outputs
+   reached the user before guardrails existed: a one-match DefCon haul
+   captained (Egan), a one-match blend haul captained (Stach), an
+   unused player started (Davies). Root cause each time: n=1-2 data treated
+   as track record. Now gated — but these should have been anticipated; the
+   research *said* early weeks were the worst regime.
+2. **No last-season data in the live path.** The cold-start anchor is price
+   alone; prior-season per-90s (sitting unused in our cloned datasets) are a
+   strictly better prior. This is the biggest known accuracy giveaway.
+3. **Minutes remains the #1 error source** — the participation heuristic is
+   a patch, not a model. Predicted-lineup ingestion is still missing.
+4. **Understat integration has produced zero value so far** (site lags the
+   season; features blank). The xG half of the feature space is dark.
+5. **The rate-my-team score is volatile** (61 → 90 → 77 across fixes)
+   because the "perfect wildcard" comparator inherits every scoring-layer
+   bias. It should be presented with error bars or a stability caveat.
+6. **Vice-captain/EO logic is crude** (ownership proxy, no real captaincy
+   shares; vice picked by raw metric).
+
+### Priority queue (informed by the elite-teams and cold-start research runs)
+1. Blend last-season per-90/per-GW data into early-season scores with a
+   crossover schedule (expected biggest accuracy jump; datasets on hand).
+2. Predicted-lineup/minutes ingestion (manual override file exists; needs a
+   data source).
+3. Wildcard planning support for the GW4-8 window (multi-period spec ready).
+4. Rating stability: report score ranges, not point estimates.
+5. Elite-EO tracking (top-10k ownership) once sources are identified.
+
+---
+
+# Original audit (v0.2, post-Phase 1, pre-season)
 
 *2026-08-15. An honest internal SWOT of our own system — what's solid, what's weak, and the
 prioritized plan to make it better. Complements the market-facing SWOT in
