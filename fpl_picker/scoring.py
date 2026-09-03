@@ -70,7 +70,9 @@ def base_points_per_gw(element, n_played=None):
     xgi90 = _to_float(element.get("expected_goal_involvements_per_90"))
     minutes = element.get("minutes", 0) or 0
 
-    credibility = 1.0 if n_played is None else n_played / (n_played + 4.0)
+    # k=10: per-90 output rates need ~8-12 matches to earn trust (see
+    # docs/research/12-cold-start-methods.md); k=4 trusted 2-3x too fast.
+    credibility = 1.0 if n_played is None else n_played / (n_played + 10.0)
 
     # Rough points-per-GW implied by underlying attacking involvement: a goal
     # or assist is worth ~5 points on average across positions, plus ~2 for
@@ -92,9 +94,16 @@ def base_points_per_gw(element, n_played=None):
 
     # Anchor to a price-implied prior early in the season: FPL's price list
     # is the only signal not contaminated by tiny samples (even ep_next is
-    # form-derived). The anchor fades as real matches accumulate.
-    price = _to_float(element.get("now_cost")) / 10.0
-    price_prior = 0.32 * price + 0.7 if price > 0 else current
+    # form-derived). Best practice (docs/research/12): anchor to the SEASON
+    # START price (in-season changes are ownership-driven noise) and use a
+    # concave curve — the points-per-pound slope flattens above ~9.0m.
+    now_cost = _to_float(element.get("now_cost"))
+    start_cost = now_cost - _to_float(element.get("cost_change_start"))
+    price = (start_cost if start_cost > 0 else now_cost) / 10.0
+    if price > 0:
+        price_prior = 0.7 + 0.32 * min(price, 9.0) + 0.16 * max(price - 9.0, 0.0)
+    else:
+        price_prior = current
     return credibility * current + (1.0 - credibility) * price_prior
 
 

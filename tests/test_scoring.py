@@ -22,8 +22,9 @@ def test_single_match_form_is_shrunk():
     shrunk = scoring.base_points_per_gw(one_hauler, n_played=1)
     assert shrunk < unshrunk
     assert shrunk < 4.5  # anchored near the 6.0m price prior (~2.6)
-    # With a real track record the anchor fades and form dominates again.
-    assert scoring.base_points_per_gw(one_hauler, n_played=20) > 8.0
+    # With a real track record the anchor fades and form dominates again
+    # (k=10: at n=20 the blend is ~2/3 current signals).
+    assert scoring.base_points_per_gw(one_hauler, n_played=20) > 7.0
 
 
 def test_price_prior_ranks_premium_over_one_week_wonder():
