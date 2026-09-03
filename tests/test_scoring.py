@@ -40,6 +40,29 @@ def test_price_prior_ranks_premium_over_one_week_wonder():
     ) > scoring.base_points_per_gw(cheap_hauler, n_played=1)
 
 
+def test_unused_player_scaled_below_regular(snapshot):
+    import copy
+
+    data = copy.deepcopy(snapshot)
+    # Two finished matches for team 1; two same-priced team-1 players, one
+    # ever-present and one unused.
+    for fx in data["fixtures"][:4]:
+        if fx["event"] <= 2:
+            fx["finished"] = True
+            fx["team_h_score"], fx["team_a_score"] = 1, 1
+    e1, e2 = data["bootstrap"]["elements"][0], data["bootstrap"]["elements"][1]
+    for e in (e1, e2):
+        e.update(team=1, now_cost=45, form="2.0", points_per_game="2.0",
+                 ep_next="2.0", status="a")
+    data["history"] = {
+        str(e1["id"]): [{"minutes": 90}, {"minutes": 90}],
+        str(e2["id"]): [],
+    }
+    players = {p.id: p for p in scoring.score_players(data, horizon=3)}
+    regular, unused = players[e1["id"]], players[e2["id"]]
+    assert unused.score < regular.score * 0.6
+
+
 def test_base_points_blend_renormalizes_missing_components():
     # Early-season player: no form/ppg yet, only FPL's estimate carries.
     early = {"form": "0.0", "points_per_game": "0.0", "ep_next": "4.0", "minutes": 0}

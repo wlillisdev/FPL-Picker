@@ -136,6 +136,13 @@ def score_players(data, horizon=5):
     team_fixture_cache = {}
     history = data.get("history") or {}
 
+    team_games = {t["id"]: 0 for t in bootstrap["teams"]}
+    for fx in fixtures:
+        if fx.get("finished"):
+            for tid in (fx.get("team_h"), fx.get("team_a")):
+                if tid in team_games:
+                    team_games[tid] += 1
+
     players = []
     for element in bootstrap["elements"]:
         position = POSITIONS.get(element["element_type"])
@@ -159,6 +166,13 @@ def score_players(data, horizon=5):
         else:
             n_played = None
         per_gw = base_points_per_gw(element, n_played) * availability(element)
+        # Participation factor: a price prior assumes the player plays, but a
+        # player used in n of his team's G matches earns (n+1)/(G+1) of it —
+        # ever-presents keep full value, unused squad players fall to fodder
+        # level and stop being "started" by the lineup picker.
+        games = team_games.get(team_id, 0)
+        if n_played is not None and games > 0:
+            per_gw *= (n_played + 1) / (games + 1)
         score = sum(
             per_gw * mult * (DECAY**k) for k, mult in enumerate(multipliers)
         )
