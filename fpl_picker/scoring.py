@@ -149,11 +149,15 @@ def score_players(data, horizon=5):
         multipliers = team_fixture_cache[team_id]
 
         rows = history.get(str(element["id"])) or history.get(element["id"])
-        n_played = (
-            sum(1 for r in rows if (r.get("minutes") or 0) > 0)
-            if rows is not None
-            else None
-        )
+        if rows is not None:
+            n_played = sum(1 for r in rows if (r.get("minutes") or 0) > 0)
+        elif history:
+            # History was fetched for everyone who has played; absence means
+            # this player hasn't played yet — that's n=0 (price prior), not
+            # "unknown" (which would skip the anchor and score them 0).
+            n_played = 0
+        else:
+            n_played = None
         per_gw = base_points_per_gw(element, n_played) * availability(element)
         score = sum(
             per_gw * mult * (DECAY**k) for k, mult in enumerate(multipliers)
