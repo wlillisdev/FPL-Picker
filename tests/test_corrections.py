@@ -167,3 +167,12 @@ def test_chase_takes_the_differential(xi_data):
     diff = make_player(2, "Punt", 20.0, 7.5, 10.0)
     advice = pick_captain([default, diff], xi_data, mode="chase")
     assert advice.captain.id == 2
+
+
+def test_chase_rejects_a_costly_differential(xi_data):
+    # Cheap low-owned player projecting well below the premium: chasing rank
+    # is not a licence to give away a third of the captain's expected points.
+    default = make_player(1, "Haaland", 21.0, 15.5, 75.0)
+    weak = make_player(2, "Punt", 14.0, 6.0, 8.0)
+    advice = pick_captain([default, weak], xi_data, mode="chase")
+    assert advice.captain.id == 1

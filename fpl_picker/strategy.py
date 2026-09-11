@@ -94,10 +94,16 @@ def pick_captain(starting_xi, data, mode="neutral"):
         )
 
     if mode == "chase":
+        # A differential armband must cost almost nothing in expectation:
+        # within DEVIATE_GAP absolutely AND at least 85% of the default's
+        # projection. A 2-point gap on a ~7-point projection is a 30%
+        # sacrifice, not a "close call" — and cheap differentials carry
+        # lower haul ceilings, which matters most for a doubled score.
         diffs = [
             p for p in pool
             if _eo_proxy(p) < EO_DIFFERENTIAL
-            and metric(default) - metric(p) <= STAY_GAP
+            and metric(default) - metric(p) <= DEVIATE_GAP
+            and metric(p) >= 0.85 * metric(default)
         ]
         if diffs:
             punt = max(diffs, key=metric)
