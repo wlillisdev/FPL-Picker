@@ -1,7 +1,35 @@
 import pytest
 
 from fpl_picker import scoring
-from fpl_picker.scout import fixture_runs, strike_candidates
+from fpl_picker.scout import fixture_outlook, fixture_runs, strike_candidates
+
+
+def test_fixture_outlook_verdicts_and_blanks():
+    data = {
+        "bootstrap": {
+            "events": [{"id": 1, "is_next": True}],
+            "teams": [
+                {"id": 1, "short_name": "AAA"},
+                {"id": 2, "short_name": "BBB"},
+            ],
+            "elements": [],
+        },
+        "fixtures": [
+            {"event": 1, "team_h": 1, "team_a": 2,
+             "team_h_difficulty": 2, "team_a_difficulty": 5},
+            {"event": 2, "team_h": 2, "team_a": 1,
+             "team_h_difficulty": 5, "team_a_difficulty": 2},
+            # GW3 is blank for both teams.
+        ],
+    }
+    run, average, verdict = fixture_outlook(data, 1, weeks=3)
+    assert run[:2] == ["BBB(H)", "BBB(A)"]
+    assert run[2] == "-"  # blank gameweek
+    assert verdict == "OK"  # two easy games dragged down by the blank
+
+    run2, avg2, verdict2 = fixture_outlook(data, 2, weeks=2)
+    assert verdict2 == "TOUGH"  # difficulty 5 twice
+    assert avg2 == 5.0
 
 
 def test_fixture_runs_ranks_and_lists_opponents(snapshot):

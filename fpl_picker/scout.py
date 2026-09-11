@@ -58,6 +58,49 @@ def fixture_runs(data, horizon=6):
     return rows
 
 
+def fixture_outlook(data, team_id, weeks=4):
+    """Next `weeks` gameweeks for one team, with a difficulty verdict.
+
+    Returns (["SUN(A)", "BHA(H)", ...], average_difficulty, verdict) where a
+    blank gameweek shows as "-" and counts as maximum difficulty.
+    """
+    bootstrap = data["bootstrap"]
+    fixtures = data["fixtures"]
+    start = next_event_id(bootstrap)
+    teams = {t["id"]: t for t in bootstrap["teams"]}
+
+    entries, difficulties = [], []
+    for gw in range(start, start + weeks):
+        matches = []
+        for f in fixtures:
+            if f.get("event") != gw:
+                continue
+            if f.get("team_h") == team_id:
+                opp, venue = teams[f["team_a"]]["short_name"], "H"
+                difficulty = f.get("team_h_difficulty") or 3
+            elif f.get("team_a") == team_id:
+                opp, venue = teams[f["team_h"]]["short_name"], "A"
+                difficulty = f.get("team_a_difficulty") or 3
+            else:
+                continue
+            matches.append(f"{opp}({venue})")
+            difficulties.append(difficulty)
+        if matches:
+            entries.append("+".join(matches))  # "+" marks a double gameweek
+        else:
+            entries.append("-")
+            difficulties.append(5)  # a blank is the worst outcome
+
+    average = sum(difficulties) / len(difficulties) if difficulties else 5.0
+    if average <= 2.6:
+        verdict = "GOOD"
+    elif average <= 3.2:
+        verdict = "OK"
+    else:
+        verdict = "TOUGH"
+    return entries, average, verdict
+
+
 def strike_candidates(data, players, horizon=6, max_ownership=100.0, min_minutes=180):
     """Players whose underlying numbers lead their output.
 
@@ -136,11 +179,19 @@ def strike_candidates(data, players, horizon=6, max_ownership=100.0, min_minutes
 def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
     runs = fixture_runs(data, horizon)
     print(f"\n=== Fixture runs, next {horizon} gameweeks (easiest first) ===")
+
+    def _run_line(row):
+        _, _, verdict = fixture_outlook(data, row["team_id"], weeks=horizon)
+        print(
+            f"  {row['team']:<4} {row['ease']:>5.2f} {verdict:<6} "
+            f"{' '.join(row['fixtures'])}"
+        )
+
     for row in runs[:6]:
-        print(f"  {row['team']:<4} {row['ease']:>5.2f}  {' '.join(row['fixtures'])}")
+        _run_line(row)
     print("  ...")
     for row in runs[-4:]:
-        print(f"  {row['team']:<4} {row['ease']:>5.2f}  {' '.join(row['fixtures'])}")
+        _run_line(row)
 
     rows = strike_candidates(
         data, players, horizon=horizon, max_ownership=max_ownership
@@ -156,9 +207,9 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
         "  numbers is usually low-owned because he does not start."
     )
     header = (
-        f"  {'Player':<18} {'Pos':<4} {'Team':<5} {'Price':>6} {'Pts':>4} "
-        f"{'PPG':>5} {'Form':>5} {'xGI/90':>7} {'Mins':>5} {'Starts':>7} "
-        f"{'Own%':>6} {'Gap':>6}  Fixtures"
+        f"  {'Player':<16} {'Pos':<4} {'Team':<5} {'Price':>6} {'Pts':>4} "
+        f"{'Form':>5} {'xGI/90':>7} {'Gap':>5} {'Mins':>5} {'Starts':>8} "
+        f"{'Own%':>6}  {'Next 4 fixtures':<34} Run"
     )
     print(header)
     for row in rows[:limit]:
@@ -166,9 +217,10 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
         starts = "?" if row["starts"] is None else str(row["starts"])
         share = row["start_share"]
         starts_col = starts if share is None else f"{starts} ({share:.0%})"
+        run, _, verdict = fixture_outlook(data, p.team_id, weeks=4)
         print(
-            f"  {p.name:<18} {p.position:<4} {p.team:<5} £{p.price:>4.1f}m "
-            f"{row['points']:>4} {row['ppg']:>5.1f} {row['form']:>5.1f} "
-            f"{row['xgi90']:>7.2f} {row['minutes']:>5} {starts_col:>7} "
-            f"{row['ownership']:>5.1f}% {row['gap']:>+6.1f}  {p.next_fixture}"
+            f"  {p.name:<16} {p.position:<4} {p.team:<5} £{p.price:>4.1f}m "
+            f"{row['points']:>4} {row['form']:>5.1f} {row['xgi90']:>7.2f} "
+            f"{row['gap']:>+5.1f} {row['minutes']:>5} {starts_col:>8} "
+            f"{row['ownership']:>5.1f}%  {' '.join(run):<34} {verdict}"
         )
