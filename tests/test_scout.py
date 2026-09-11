@@ -101,6 +101,53 @@ def test_fixture_swings_detects_easing_and_hardening():
     assert swings["T2"]["swing"] < 0  # hardening — sell before the cliff
 
 
+def test_edge_board_prefers_easing_fixtures(snapshot):
+    """Two equal players: the one whose fixtures ease must rank higher."""
+    import copy
+
+    from fpl_picker.scout import edge_board
+
+    data = copy.deepcopy(snapshot)
+    teams = data["bootstrap"]["teams"]
+    hard_then_easy, easy_then_hard = teams[0]["id"], teams[1]["id"]
+    data["fixtures"] = []
+    for gw in range(1, 7):
+        near = gw <= 3
+        data["fixtures"].append(
+            {"event": gw, "team_h": hard_then_easy, "team_a": teams[2]["id"],
+             "team_h_difficulty": 5 if near else 2, "team_a_difficulty": 3,
+             "finished": gw < 1}
+        )
+        data["fixtures"].append(
+            {"event": gw, "team_h": easy_then_hard, "team_a": teams[3]["id"],
+             "team_h_difficulty": 2 if near else 5, "team_a_difficulty": 3,
+             "finished": gw < 1}
+        )
+    # Three completed matches each, so minutes reliability can be computed.
+    for _ in range(3):
+        for team_id in (hard_then_easy, easy_then_hard):
+            data["fixtures"].append(
+                {"event": 0, "team_h": team_id, "team_a": teams[4]["id"],
+                 "finished": True, "team_h_difficulty": 3, "team_a_difficulty": 3}
+            )
+    data["bootstrap"]["events"] = [{"id": 1, "is_next": True}]
+
+    for e in data["bootstrap"]["elements"]:
+        e.update(minutes=0, expected_goal_involvements_per_90="0.0",
+                 selected_by_percent="5.0", expected_goal_involvements="0",
+                 goals_scored=0, assists=0, status="a")
+    rising, falling = data["bootstrap"]["elements"][0], data["bootstrap"]["elements"][1]
+    rising.update(team=hard_then_easy, minutes=270, starts=3,
+                  expected_goal_involvements_per_90="0.70")
+    falling.update(team=easy_then_hard, minutes=270, starts=3,
+                   expected_goal_involvements_per_90="0.70")
+
+    players = scoring.score_players(data, horizon=6)
+    rows = {r["player"].id: r for r in edge_board(data, players, weeks=3)}
+    assert rows[rising["id"]]["edge"] > rows[falling["id"]]["edge"]
+    assert "BUY BY GW" in rows[rising["id"]]["action"]
+
+
 def test_strike_candidates_rank_by_volume_and_filters(snapshot):
     import copy
 

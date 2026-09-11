@@ -101,6 +101,90 @@ def fixture_outlook(data, team_id, weeks=4):
     return entries, average, verdict
 
 
+def _verdict(average):
+    return "GOOD" if average <= 2.6 else ("OK" if average <= 3.2 else "TOUGH")
+
+
+def edge_board(data, players, weeks=3, max_ownership=25.0, min_minutes=180):
+    """The intersection: players creating chances whose fixtures are turning.
+
+    Ownership follows returns and returns follow fixtures, so the cheap
+    window to buy a player is while his team's run still looks bad and his
+    underlying numbers are already good. Each row carries the gameweek by
+    which to act — after the run turns, the price and the crowd have moved.
+    """
+    swings = {r["team_id"]: r for r in fixture_swings(data, weeks=weeks)}
+    candidates = strike_candidates(
+        data,
+        players,
+        horizon=weeks * 2,
+        max_ownership=max_ownership,
+        min_minutes=min_minutes,
+    )
+    start = next_event_id(data["bootstrap"])
+
+    rows = []
+    for c in candidates:
+        swing = swings.get(c["player"].team_id)
+        if swing is None:
+            continue
+        quality = c["xgi90"] * (c["minutes_share"] ** 2)
+        easing = max(swing["swing"], 0.0)
+
+        if swing["near"] <= 2.8:
+            action = "BUY NOW (run already good)"
+        elif easing >= 0.3:
+            action = f"BUY BY GW{start + weeks - 1} (run turns GW{start + weeks})"
+        elif swing["far"] <= 2.8:
+            action = f"WATCH — eases GW{start + weeks}"
+        else:
+            action = "hold — no swing"
+
+        rows.append(
+            {
+                **c,
+                "swing": swing["swing"],
+                "near": swing["near"],
+                "far": swing["far"],
+                "later": swing["later"],
+                "action": action,
+                # Easing fixtures multiply an already-good underlying profile.
+                "edge": quality * (1.0 + easing),
+            }
+        )
+    rows.sort(key=lambda r: -r["edge"])
+    return rows
+
+
+def print_edge_board(data, players, weeks=3, max_ownership=25.0, limit=12):
+    rows = edge_board(data, players, weeks=weeks, max_ownership=max_ownership)
+    print(
+        f"\n=== EDGE BOARD: chance volume x fixture swing "
+        f"(ownership <= {max_ownership:.0f}%) ==="
+    )
+    print(
+        "  Buy while the run still looks bad and the underlying numbers are\n"
+        "  already good. Once the fixtures turn, so do the price and the crowd."
+    )
+    print(
+        f"  {'Player':<16} {'Pos':<4} {'Team':<5} {'Price':>6} {'Pts':>4} "
+        f"{'Form':>5} {'xGI/90':>7} {'Gap':>5} {'Starts':>8} {'Own%':>6} "
+        f"{'Now':<6} {'Then':<6} {'Swing':>6}  Action"
+    )
+    for row in rows[:limit]:
+        p = row["player"]
+        starts = "?" if row["starts"] is None else str(row["starts"])
+        share = row["start_share"]
+        starts_col = starts if share is None else f"{starts} ({share:.0%})"
+        print(
+            f"  {p.name:<16} {p.position:<4} {p.team:<5} £{p.price:>4.1f}m "
+            f"{row['points']:>4} {row['form']:>5.1f} {row['xgi90']:>7.2f} "
+            f"{row['gap']:>+5.1f} {starts_col:>8} {row['ownership']:>5.1f}% "
+            f"{_verdict(row['near']):<6} {_verdict(row['far']):<6} "
+            f"{row['swing']:>+6.2f}  {row['action']}"
+        )
+
+
 def fixture_swings(data, weeks=3):
     """Teams whose fixtures turn sharply better or worse.
 
@@ -267,6 +351,8 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
             f"  {row['team']:<5} {row['near']:>5.2f} {row['far']:>5.2f} "
             f"{row['swing']:>+6.2f}  {' '.join(row['later'])}   <- HARDENING"
         )
+
+    print_edge_board(data, players, weeks=3, max_ownership=max_ownership)
 
     rows = strike_candidates(
         data, players, horizon=horizon, max_ownership=max_ownership
