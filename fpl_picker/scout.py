@@ -124,6 +124,8 @@ def strike_candidates(data, players, horizon=6, max_ownership=100.0, min_minutes
                 "ownership": ownership,
                 "gap": gap,
                 "form": _f(element.get("form")),
+                "points": element.get("total_points") or 0,
+                "ppg": _f(element.get("points_per_game")),
                 "score": xgi90 * fixture_factor * reliability,
             }
         )
@@ -154,17 +156,19 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
         "  numbers is usually low-owned because he does not start."
     )
     header = (
-        f"  {'Player':<18} {'Pos':<4} {'Team':<5} {'Price':>6} {'xGI/90':>7} "
-        f"{'Mins':>6} {'Starts':>7} {'Own%':>6} {'Gap':>6}  Fixtures"
+        f"  {'Player':<18} {'Pos':<4} {'Team':<5} {'Price':>6} {'Pts':>4} "
+        f"{'PPG':>5} {'Form':>5} {'xGI/90':>7} {'Mins':>5} {'Starts':>7} "
+        f"{'Own%':>6} {'Gap':>6}  Fixtures"
     )
     print(header)
     for row in rows[:limit]:
         p = row["player"]
         starts = "?" if row["starts"] is None else str(row["starts"])
         share = row["start_share"]
-        starts_col = f"{starts}" if share is None else f"{starts} ({share:.0%})"
+        starts_col = starts if share is None else f"{starts} ({share:.0%})"
         print(
             f"  {p.name:<18} {p.position:<4} {p.team:<5} £{p.price:>4.1f}m "
-            f"{row['xgi90']:>7.2f} {row['minutes']:>6} {starts_col:>7} "
+            f"{row['points']:>4} {row['ppg']:>5.1f} {row['form']:>5.1f} "
+            f"{row['xgi90']:>7.2f} {row['minutes']:>5} {starts_col:>7} "
             f"{row['ownership']:>5.1f}% {row['gap']:>+6.1f}  {p.next_fixture}"
         )
