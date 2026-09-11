@@ -83,6 +83,12 @@ def print_selection(selection, horizon):
     )
     print(f"Captain: {selection.captain.name}   Vice: {selection.vice_captain.name}")
     warn_head_to_head(selection.starting_xi)
+    flagged = [p for p in selection.squad if p.news]
+    if flagged:
+        print("\n=== Team news on your squad ===")
+        for p in sorted(flagged, key=lambda p: p not in selection.starting_xi):
+            where = "STARTING" if p in selection.starting_xi else "bench"
+            print(f"  [{where}] {p.name} ({p.team}): {p.news}")
 
 
 def print_team_report(report, horizon, free_transfers):
@@ -120,6 +126,14 @@ def print_team_report(report, horizon, free_transfers):
             for o, i in zip(plan.players_out, plan.players_in)
         )
         print(f"\nRecommendation: {moves}  [net {plan.net_gain:+.1f} pts]")
+        for incoming in plan.players_in:
+            if incoming.news:
+                print(f"  WARNING — {incoming.name}: {incoming.news}")
+            if incoming.status != "a":
+                print(
+                    f"  WARNING — {incoming.name} is flagged "
+                    f"'{incoming.status}'. Verify before transferring."
+                )
     else:
         print(
             "\nRecommendation: hold your transfers — no move clears the "

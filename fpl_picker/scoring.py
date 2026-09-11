@@ -217,7 +217,7 @@ def score_players(data, horizon=5):
                     opp_id for _, opp_id, _ in next_fixtures.get(team_id, [])
                 ),
                 status=element.get("status", "a"),
-                news=element.get("news", "") or "",
+                news=(element.get("news") or "").strip(),
                 stats={
                     "form": element.get("form"),
                     "ppg": element.get("points_per_game"),
