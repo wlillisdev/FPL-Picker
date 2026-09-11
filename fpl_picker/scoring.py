@@ -34,6 +34,9 @@ class Player:
     # blank). Squad/transfer decisions use the horizon `score`; lineup,
     # bench order, and captaincy use this.
     next_score: float = 0.0
+    # Next gameweek's opponent(s), e.g. "MUN (H)" — "-" for a blank.
+    next_fixture: str = "-"
+    next_opponent_ids: tuple = ()
 
 
 def _to_float(value):
@@ -145,6 +148,15 @@ def score_players(data, horizon=5):
     team_fixture_cache = {}
     history = data.get("history") or {}
 
+    next_fixtures = {}
+    for f in fixtures:
+        if f.get("event") != start_event:
+            continue
+        h, a = f.get("team_h"), f.get("team_a")
+        if h in teams and a in teams:
+            next_fixtures.setdefault(h, []).append((teams[a]["short_name"], a, True))
+            next_fixtures.setdefault(a, []).append((teams[h]["short_name"], h, False))
+
     team_games = {t["id"]: 0 for t in bootstrap["teams"]}
     for fx in fixtures:
         if fx.get("finished"):
@@ -197,6 +209,13 @@ def score_players(data, horizon=5):
                 score=round(score, 2),
                 per_gw=round(per_gw, 2),
                 next_score=round(per_gw * (multipliers[0] if multipliers else 0.0), 2),
+                next_fixture=", ".join(
+                    f"{name} ({'H' if home else 'A'})"
+                    for name, _, home in next_fixtures.get(team_id, [])
+                ) or "-",
+                next_opponent_ids=tuple(
+                    opp_id for _, opp_id, _ in next_fixtures.get(team_id, [])
+                ),
                 status=element.get("status", "a"),
                 news=element.get("news", "") or "",
                 stats={

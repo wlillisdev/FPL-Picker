@@ -37,10 +37,31 @@ def format_player(p, captain=None, vice=None):
     elif vice and p.id == vice.id:
         tag = " (V)"
     flag = "" if p.status == "a" else f"  [!{p.status}]"
+    fixture = f"  vs {p.next_fixture}" if p.next_fixture else ""
     return (
         f"  {p.position:<4} {p.name + tag:<22} {p.team:<4} "
-        f"£{p.price:>5.1f}m  {p.score:>6.2f} pts{flag}"
+        f"£{p.price:>5.1f}m  {p.score:>6.2f} pts{fixture}{flag}"
     )
+
+
+def warn_head_to_head(players, label="squad"):
+    """Warn when selected players face each other — their points partly
+    cancel, which no single-player projection can see."""
+    by_team = {}
+    for p in players:
+        by_team.setdefault(p.team_id, []).append(p)
+    seen = set()
+    for p in players:
+        for opp_id in p.next_opponent_ids:
+            pair = tuple(sorted((p.team_id, opp_id)))
+            if opp_id in by_team and pair not in seen:
+                seen.add(pair)
+                mine = ", ".join(x.name for x in by_team[p.team_id])
+                theirs = ", ".join(x.name for x in by_team[opp_id])
+                print(
+                    f"  note: {mine} face {theirs} next gameweek — returns "
+                    "partly cancel, and a clean sheet is unlikely either way."
+                )
 
 
 def print_selection(selection, horizon):
@@ -61,6 +82,7 @@ def print_selection(selection, horizon):
         f"{selection.projected_points:.1f}"
     )
     print(f"Captain: {selection.captain.name}   Vice: {selection.vice_captain.name}")
+    warn_head_to_head(selection.starting_xi)
 
 
 def print_team_report(report, horizon, free_transfers):

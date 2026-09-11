@@ -101,6 +101,15 @@ def test_apply_overrides(snapshot):
     assert scores == sorted(scores, reverse=True)  # re-sorted after applying
 
 
+def test_next_fixture_is_populated(snapshot):
+    players = scoring.score_players(snapshot, horizon=5)
+    # Every team plays in GW1 of the synthetic fixture list.
+    assert all(p.next_fixture != "-" for p in players)
+    sample = players[0]
+    assert sample.next_fixture.endswith("(H)") or sample.next_fixture.endswith("(A)")
+    assert len(sample.next_opponent_ids) == 1
+
+
 def test_score_players_sorted_and_priced(snapshot):
     players = scoring.score_players(snapshot, horizon=5)
     assert len(players) == 90
