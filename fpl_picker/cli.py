@@ -211,6 +211,15 @@ def main(argv=None):
         "--accuracy", action="store_true",
         help="score all logged predictions against actual results and exit",
     )
+    parser.add_argument(
+        "--scout", action="store_true",
+        help="show fixture runs and players whose chance volume is leading "
+        "their output (buy-before-the-crowd candidates)",
+    )
+    parser.add_argument(
+        "--max-ownership", type=float, default=100.0, metavar="PCT",
+        help="with --scout, only show players below this ownership %%",
+    )
     args = parser.parse_args(argv)
 
     if args.data:
@@ -294,6 +303,13 @@ def main(argv=None):
             print(f"  warning: override {name!r} matched no player")
 
     log_predictions(players, gw, args.horizon)
+
+    if args.scout:
+        from .scout import print_scout_report
+
+        print_scout_report(
+            data, players, horizon=args.horizon, max_ownership=args.max_ownership
+        )
 
     if args.top:
         for pos in FORMATION_ORDER:
