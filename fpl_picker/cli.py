@@ -91,6 +91,27 @@ def print_selection(selection, horizon):
             print(f"  [{where}] {p.name} ({p.team}): {p.news}")
 
 
+def print_squad_fixture_outlook(report, data):
+    """Which of your own clubs are heading into good and bad runs."""
+    from .scout import fixture_outlook
+
+    by_team = {}
+    for p in report.baseline.squad:
+        by_team.setdefault((p.team_id, p.team), []).append(p.name)
+
+    rows = []
+    for (team_id, short), names in by_team.items():
+        run, average, verdict = fixture_outlook(data, team_id, weeks=5)
+        rows.append((average, short, verdict, run, names))
+    rows.sort()
+
+    print("\n=== Your squad's fixture outlook (next 5) ===")
+    for average, short, verdict, run, names in rows:
+        print(
+            f"  {short:<5} {verdict:<6} {' '.join(run):<40} {', '.join(names)}"
+        )
+
+
 def print_team_report(report, horizon, free_transfers):
     print(f"\n=== Rate my team: {report.rating}/100 ===")
     print(
@@ -361,6 +382,7 @@ def main(argv=None):
         )
         apply_captaincy(report.baseline, data, args.rank_mode)
         print_team_report(report, args.horizon, args.free_transfers)
+        print_squad_fixture_outlook(report, data)
         return
 
     club_caps = {}

@@ -66,6 +66,41 @@ def test_fixture_runs_handles_blanks_and_doubles():
     assert runs["CCC"]["ease"] == 0.0  # blank
 
 
+def test_fixture_swings_detects_easing_and_hardening():
+    from fpl_picker.scout import fixture_swings
+
+    teams = [{"id": i, "short_name": f"T{i}"} for i in (1, 2, 3)]
+    fixtures = []
+    for gw in range(1, 7):
+        # Team 1: hard now (GW1-3), easy later (GW4-6). Team 2 the reverse.
+        near_block = gw <= 3
+        fixtures.append(
+            {
+                "event": gw, "team_h": 1, "team_a": 3,
+                "team_h_difficulty": 5 if near_block else 2,
+                "team_a_difficulty": 3,
+            }
+        )
+        fixtures.append(
+            {
+                "event": gw, "team_h": 2, "team_a": 3,
+                "team_h_difficulty": 2 if near_block else 5,
+                "team_a_difficulty": 3,
+            }
+        )
+    data = {
+        "bootstrap": {
+            "events": [{"id": 1, "is_next": True}],
+            "teams": teams,
+            "elements": [],
+        },
+        "fixtures": fixtures,
+    }
+    swings = {r["team"]: r for r in fixture_swings(data, weeks=3)}
+    assert swings["T1"]["swing"] > 0  # easing — buy before the turn
+    assert swings["T2"]["swing"] < 0  # hardening — sell before the cliff
+
+
 def test_strike_candidates_rank_by_volume_and_filters(snapshot):
     import copy
 

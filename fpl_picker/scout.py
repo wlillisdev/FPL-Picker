@@ -101,6 +101,64 @@ def fixture_outlook(data, team_id, weeks=4):
     return entries, average, verdict
 
 
+def fixture_swings(data, weeks=3):
+    """Teams whose fixtures turn sharply better or worse.
+
+    Compares average difficulty over the next `weeks` gameweeks against the
+    `weeks` after that. A positive swing means the run is about to ease —
+    the buy-before-the-crowd window, because ownership follows returns and
+    returns follow fixtures. Negative means sell before the cliff.
+    """
+    bootstrap = data["bootstrap"]
+    start = next_event_id(bootstrap)
+    rows = []
+    for team in bootstrap["teams"]:
+        _, near, _ = fixture_outlook(data, team["id"], weeks=weeks)
+        # Difficulty of the block after the near one.
+        saved_start = start
+        far_entries, far, _ = _outlook_from(data, team["id"], saved_start + weeks, weeks)
+        rows.append(
+            {
+                "team": team["short_name"],
+                "team_id": team["id"],
+                "near": near,
+                "far": far,
+                "swing": near - far,  # positive = getting easier
+                "later": far_entries,
+            }
+        )
+    rows.sort(key=lambda r: -r["swing"])
+    return rows
+
+
+def _outlook_from(data, team_id, start_gw, weeks):
+    """fixture_outlook() but starting from an arbitrary gameweek."""
+    fixtures = data["fixtures"]
+    teams = {t["id"]: t for t in data["bootstrap"]["teams"]}
+    entries, difficulties = [], []
+    for gw in range(start_gw, start_gw + weeks):
+        matches = []
+        for f in fixtures:
+            if f.get("event") != gw:
+                continue
+            if f.get("team_h") == team_id:
+                opp, venue = teams[f["team_a"]]["short_name"], "H"
+                difficulty = f.get("team_h_difficulty") or 3
+            elif f.get("team_a") == team_id:
+                opp, venue = teams[f["team_h"]]["short_name"], "A"
+                difficulty = f.get("team_a_difficulty") or 3
+            else:
+                continue
+            matches.append(f"{opp}({venue})")
+            difficulties.append(difficulty)
+        entries.append("+".join(matches) if matches else "-")
+        if not matches:
+            difficulties.append(5)
+    average = sum(difficulties) / len(difficulties) if difficulties else 5.0
+    verdict = "GOOD" if average <= 2.6 else ("OK" if average <= 3.2 else "TOUGH")
+    return entries, average, verdict
+
+
 def strike_candidates(data, players, horizon=6, max_ownership=100.0, min_minutes=180):
     """Players whose underlying numbers lead their output.
 
@@ -192,6 +250,23 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
     print("  ...")
     for row in runs[-4:]:
         _run_line(row)
+
+    swings = fixture_swings(data, weeks=3)
+    print("\n=== Fixture swings: whose run turns (buy before the crowd) ===")
+    print("  Next 3 gameweeks vs the 3 after. Buy a team's assets the week")
+    print("  BEFORE the run eases — ownership follows returns, returns follow")
+    print("  fixtures, so the cheap window is while the fixtures still look bad.")
+    print(f"  {'Team':<5} {'Now':>5} {'Then':>5} {'Swing':>6}  Gameweeks 4-6 ahead")
+    for row in swings[:4]:
+        print(
+            f"  {row['team']:<5} {row['near']:>5.2f} {row['far']:>5.2f} "
+            f"{row['swing']:>+6.2f}  {' '.join(row['later'])}   <- EASING"
+        )
+    for row in swings[-3:]:
+        print(
+            f"  {row['team']:<5} {row['near']:>5.2f} {row['far']:>5.2f} "
+            f"{row['swing']:>+6.2f}  {' '.join(row['later'])}   <- HARDENING"
+        )
 
     rows = strike_candidates(
         data, players, horizon=horizon, max_ownership=max_ownership
