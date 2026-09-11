@@ -60,6 +60,32 @@ def test_strike_candidates_rank_by_volume_and_filters(snapshot):
     assert hidden["id"] not in {r["player"].id for r in rows}  # ownership filter
 
 
+def test_cameo_rate_loses_to_regular_starter(snapshot):
+    """A brilliant per-90 rate off the bench must not outrank a starter."""
+    import copy
+
+    data = copy.deepcopy(snapshot)
+    for f in data["fixtures"]:
+        if f["event"] <= 3:
+            f["finished"] = True
+            f["team_h_score"], f["team_a_score"] = 1, 1
+    for e in data["bootstrap"]["elements"]:
+        e["minutes"] = 0
+        e["expected_goal_involvements_per_90"] = "0.0"
+        e["selected_by_percent"] = "5.0"
+        e["expected_goal_involvements"] = "0"
+        e["goals_scored"], e["assists"] = 0, 0
+
+    starter, cameo = data["bootstrap"]["elements"][0], data["bootstrap"]["elements"][1]
+    starter["team"] = cameo["team"] = data["bootstrap"]["teams"][0]["id"]
+    starter.update(minutes=270, starts=3, expected_goal_involvements_per_90="0.60")
+    cameo.update(minutes=180, starts=0, expected_goal_involvements_per_90="1.20")
+
+    players = scoring.score_players(data, horizon=5)
+    rows = {r["player"].id: r for r in strike_candidates(data, players, horizon=5)}
+    assert rows[starter["id"]]["score"] > rows[cameo["id"]]["score"]
+
+
 def test_strike_candidates_skip_low_minutes(snapshot):
     import copy
 

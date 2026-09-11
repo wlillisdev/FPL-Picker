@@ -105,16 +105,26 @@ def strike_candidates(data, players, horizon=6, max_ownership=100.0, min_minutes
             (element.get("goals_scored") or 0) + (element.get("assists") or 0)
         )
 
+        starts = element.get("starts")
+        start_share = (starts / games) if (starts is not None and games) else None
+        # Minutes dominate: a great per-90 rate from a 25-minute cameo is
+        # worth nothing. Squaring the share punishes rotation hard, and a
+        # player who has started every game is untouched.
+        reliability = minutes_share**2 if minutes_share else 0.0
+
         rows.append(
             {
                 "player": player,
                 "xgi90": xgi90,
+                "minutes": minutes,
+                "starts": starts,
+                "start_share": start_share,
                 "minutes_share": minutes_share,
                 "fixture_factor": fixture_factor,
                 "ownership": ownership,
                 "gap": gap,
                 "form": _f(element.get("form")),
-                "score": xgi90 * fixture_factor * (0.4 + 0.6 * minutes_share),
+                "score": xgi90 * fixture_factor * reliability,
             }
         )
     rows.sort(key=lambda r: -r["score"])
@@ -138,18 +148,23 @@ def print_scout_report(data, players, horizon=6, max_ownership=100.0, limit=12):
         f"(ownership <= {max_ownership:.0f}%) ==="
     )
     print(
-        "  Ranked by expected involvements per 90, weighted for fixtures and "
-        "minutes.\n  'gap' = expected involvements minus actual returns so far."
+        "  Ranked by expected involvements per 90 x fixture ease x minutes\n"
+        "  reliability. CHECK THE MINS COLUMN FIRST: a great per-90 rate off\n"
+        "  the bench is worth nothing, and a low-owned player with elite\n"
+        "  numbers is usually low-owned because he does not start."
     )
     header = (
         f"  {'Player':<18} {'Pos':<4} {'Team':<5} {'Price':>6} {'xGI/90':>7} "
-        f"{'Own%':>6} {'Gap':>6}  Fixtures"
+        f"{'Mins':>6} {'Starts':>7} {'Own%':>6} {'Gap':>6}  Fixtures"
     )
     print(header)
     for row in rows[:limit]:
         p = row["player"]
+        starts = "?" if row["starts"] is None else str(row["starts"])
+        share = row["start_share"]
+        starts_col = f"{starts}" if share is None else f"{starts} ({share:.0%})"
         print(
             f"  {p.name:<18} {p.position:<4} {p.team:<5} £{p.price:>4.1f}m "
-            f"{row['xgi90']:>7.2f} {row['ownership']:>5.1f}% {row['gap']:>+6.1f}  "
-            f"{p.next_fixture}"
+            f"{row['xgi90']:>7.2f} {row['minutes']:>6} {starts_col:>7} "
+            f"{row['ownership']:>5.1f}% {row['gap']:>+6.1f}  {p.next_fixture}"
         )
