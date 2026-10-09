@@ -58,6 +58,31 @@ def fetch_history(bootstrap, timeout=30, min_minutes=1):
     return history
 
 
+def build_snapshot(bootstrap_path, fixtures_path, history_path=None):
+    """Assemble a snapshot from files downloaded by hand in a browser.
+
+    When the FPL API blocks the host you run on (common on cloud servers),
+    open these in a normal browser and save each page:
+      https://fantasy.premierleague.com/api/bootstrap-static/
+      https://fantasy.premierleague.com/api/fixtures/
+    Everything except the OpenFPL forecaster works from those two; pass
+    ``history_path`` only if you have a previously saved history blob.
+    """
+    with open(bootstrap_path) as f:
+        bootstrap = json.load(f)
+    with open(fixtures_path) as f:
+        fixtures = json.load(f)
+    if "elements" not in bootstrap or "teams" not in bootstrap:
+        raise ValueError(f"{bootstrap_path} is not the bootstrap-static response")
+    if not isinstance(fixtures, list):
+        raise ValueError(f"{fixtures_path} is not the fixtures response")
+    data = {"bootstrap": bootstrap, "fixtures": fixtures}
+    if history_path:
+        with open(history_path) as f:
+            data["history"] = json.load(f)
+    return data
+
+
 def load_data(path):
     """Load a previously saved API snapshot from a JSON file."""
     with open(path) as f:

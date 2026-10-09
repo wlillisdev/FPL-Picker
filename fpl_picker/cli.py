@@ -209,6 +209,16 @@ def main(argv=None):
         'e.g. {"Mbeumo": 1.15, "Szoboszlai": 0.85}',
     )
     parser.add_argument(
+        "--from-files", nargs=2, metavar=("BOOTSTRAP", "FIXTURES"),
+        help="build a snapshot from browser-downloaded API responses, for "
+        "when the FPL API blocks this host (see README)",
+    )
+    parser.add_argument(
+        "--squad", metavar="NAMES",
+        help="comma-separated list of 15 player names to analyse instead of "
+        "fetching a team by ID (for when the API is blocked)",
+    )
+    parser.add_argument(
         "--data", metavar="FILE", help="load an offline API snapshot instead of fetching"
     )
     parser.add_argument(
@@ -257,7 +267,13 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    if args.data:
+    if args.from_files:
+        try:
+            data = api.build_snapshot(*args.from_files)
+        except (OSError, ValueError) as exc:
+            sys.exit(f"error: {exc}")
+        print(f"Built snapshot from {args.from_files[0]} and {args.from_files[1]}")
+    elif args.data:
         data = api.load_data(args.data)
         print(f"Loaded data snapshot from {args.data}")
     else:
@@ -351,6 +367,40 @@ def main(argv=None):
             print(f"\n--- Top {args.top} {pos} ---")
             for p in [x for x in players if x.position == pos][: args.top]:
                 print(format_player(p))
+
+    if args.squad:
+        names = [n.strip() for n in args.squad.split(",") if n.strip()]
+        if len(names) != 15:
+            sys.exit(f"error: --squad needs 15 names, got {len(names)}")
+        picks = resolve_names(names, players, "squad")
+        by_id = {p.id: p for p in players}
+        chosen = [by_id[pid] for pid in picks]
+        from collections import Counter
+
+        from .optimizer import MAX_PER_CLUB, SQUAD_SHAPE
+
+        shape = Counter(p.position for p in chosen)
+        if dict(shape) != SQUAD_SHAPE:
+            sys.exit(
+                f"error: squad must be {SQUAD_SHAPE}, got {dict(shape)}. "
+                "List all 15 players including the bench."
+            )
+        clubs = Counter(p.team for p in chosen)
+        over = [c for c, n in clubs.items() if n > MAX_PER_CLUB]
+        if over:
+            sys.exit(f"error: more than {MAX_PER_CLUB} players from {', '.join(over)}")
+        report = evaluate_team(
+            players,
+            picks,
+            bank=0.0,
+            free_transfers=args.free_transfers,
+            max_transfers=args.max_transfers,
+            bench_weight=args.bench_weight,
+        )
+        apply_captaincy(report.baseline, data, args.rank_mode)
+        print_team_report(report, args.horizon, args.free_transfers)
+        print_squad_fixture_outlook(report, data)
+        return
 
     if args.team:
         try:
