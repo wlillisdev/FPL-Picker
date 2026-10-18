@@ -24,7 +24,7 @@ POSITIONS = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
 def fold(text):
     """Lowercase and strip accents so 'Muharemović' matches 'muharemovic'."""
-    stripped = unicodedata.normalize("NFKD", text)
+    stripped = unicodedata.normalize("NFKD", text.replace("ß", "ss"))
     return "".join(c for c in stripped if not unicodedata.combining(c)).lower()
 
 
@@ -38,11 +38,30 @@ def candidate_names(element):
     }
 
 
-def matches(element, wanted):
+def select(elements, wanted):
+    """Pick one element per requested name, preferring the closest match.
+
+    Substring matching alone is far too loose on a 700-player list: "Saka"
+    also finds Sakamoto and Wan-Bissaka, which silently corrupts the squad
+    total. So try exact name matches first and only fall back to a substring
+    search for the names that found nothing.
+    """
     if not wanted:
-        return (element.get("starts") or 0) > 0
-    names = candidate_names(element)
-    return any(w in name for w in wanted for name in names if name)
+        return [e for e in elements if (e.get("starts") or 0) > 0], []
+
+    chosen, missing = {}, []
+    for want in wanted:
+        exact = [e for e in elements if want in candidate_names(e)]
+        partial = [
+            e for e in elements if any(want in name for name in candidate_names(e))
+        ]
+        found = exact or partial
+        if not found:
+            missing.append(want)
+            continue
+        for element in found:
+            chosen[element["id"]] = element
+    return list(chosen.values()), missing
 
 
 def main(argv):
@@ -56,7 +75,7 @@ def main(argv):
     wanted = [fold(name) for name in argv[1:]]
     teams = {t["id"]: t["short_name"] for t in bootstrap["teams"]}
 
-    rows = [e for e in bootstrap["elements"] if matches(e, wanted)]
+    rows, missing = select(bootstrap["elements"], wanted)
     rows.sort(key=lambda e: -e["now_cost"])
 
     header = (
@@ -81,10 +100,13 @@ def main(argv):
     if wanted:
         print("-" * len(header))
         print(f"{len(rows)} players, total {total / 10:.1f}m")
-        if len(rows) != len(wanted):
+        if missing:
+            print(f"warning: no player matched {', '.join(missing)}")
+        if len(rows) > len(wanted):
             print(
                 f"warning: asked for {len(wanted)} names but matched "
-                f"{len(rows)} players — check for duplicates or typos"
+                f"{len(rows)} players, so the total is too high — narrow the "
+                "ambiguous name to a full name"
             )
 
 
