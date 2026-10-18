@@ -24,10 +24,17 @@ matters when this runs on a schedule for a whole season.
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fpl_picker import api  # noqa: E402
+
+# A full bootstrap carries every player in the game. Anything far below this
+# is a truncated or error response, and overwriting a good snapshot with one
+# is worse than having no new data at all.
+MIN_PLAYERS = 400
+MIN_FIXTURES = 300
 
 OUT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"
@@ -48,22 +55,40 @@ def main():
         sys.exit(f"error: could not fetch the FPL API: {exc}")
 
     bootstrap, fixtures = data["bootstrap"], data["fixtures"]
-    if not bootstrap.get("elements"):
-        sys.exit("error: bootstrap-static came back without any players")
+    players = bootstrap.get("elements") or []
+    if len(players) < MIN_PLAYERS or len(fixtures) < MIN_FIXTURES:
+        sys.exit(
+            f"error: implausible payload ({len(players)} players, "
+            f"{len(fixtures)} fixtures) — keeping the previous snapshot"
+        )
 
     os.makedirs(OUT_DIR, exist_ok=True)
     write_json(bootstrap, os.path.join(OUT_DIR, "bootstrap.json"))
     write_json(fixtures, os.path.join(OUT_DIR, "fixtures.json"))
 
-    next_event = api.next_event_id(bootstrap)
-    priced = [e["now_cost"] / 10.0 for e in bootstrap["elements"]]
-    print(
-        f"wrote {len(bootstrap['elements'])} players and {len(fixtures)} "
-        f"fixtures to {OUT_DIR}"
+    events = bootstrap.get("events") or []
+    upcoming = next((e for e in events if e.get("is_next")), {})
+    write_json(
+        {
+            "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "current_event": next(
+                (e["id"] for e in events if e.get("is_current")), None
+            ),
+            "next_event": upcoming.get("id"),
+            "next_deadline": upcoming.get("deadline_time"),
+            "player_count": len(players),
+            "fixture_count": len(fixtures),
+            "source": api.BASE_URL,
+        },
+        os.path.join(OUT_DIR, "meta.json"),
     )
+
+    priced = [e["now_cost"] / 10.0 for e in players]
+    print(f"wrote {len(players)} players and {len(fixtures)} fixtures to {OUT_DIR}")
     print(
-        f"next gameweek: {next_event} | price range "
-        f"£{min(priced):.1f}m-£{max(priced):.1f}m"
+        f"next gameweek: {upcoming.get('id') or api.next_event_id(bootstrap)} "
+        f"(deadline {upcoming.get('deadline_time') or 'unknown'}) | "
+        f"price range £{min(priced):.1f}m-£{max(priced):.1f}m"
     )
 
 

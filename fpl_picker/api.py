@@ -1,6 +1,7 @@
 """Fetch data from the official FPL API (no auth required)."""
 
 import json
+import os
 
 import requests
 
@@ -81,6 +82,36 @@ def build_snapshot(bootstrap_path, fixtures_path, history_path=None):
         with open(history_path) as f:
             data["history"] = json.load(f)
     return data
+
+
+STALE_AFTER_HOURS = 6.0
+
+
+def snapshot_age_hours(data_path):
+    """How old is the snapshot next to ``data_path``, in hours?
+
+    ``tools/fetch_snapshot.py`` writes a ``meta.json`` beside the data files
+    recording when it fetched them. Returns ``(age_hours, meta)``, or
+    ``(None, None)`` when there is no meta file to read — a snapshot saved by
+    hand has no provenance, and guessing one would defeat the point.
+
+    Stale prices are the failure that matters here: a snapshot from last week
+    optimises confidently against prices that have since moved, and the squad
+    it produces does not fit the budget. Age is reported so that fails loudly.
+    """
+    import datetime
+
+    meta_path = os.path.join(os.path.dirname(os.path.abspath(data_path)), "meta.json")
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+        fetched = datetime.datetime.strptime(
+            meta["fetched_at"], "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=datetime.timezone.utc)
+    except (OSError, ValueError, KeyError):
+        return None, None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - fetched).total_seconds() / 3600.0, meta
 
 
 def load_data(path):

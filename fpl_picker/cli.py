@@ -163,6 +163,35 @@ def print_team_report(report, horizon, free_transfers):
         )
 
 
+def report_snapshot_age(data_path):
+    """Say how old an offline snapshot is, loudly if it is stale.
+
+    Optimising against last week's prices produces a squad that confidently
+    does not fit the budget, and nothing in the output would tell you. So the
+    age is always printed, and a stale snapshot says so in terms that are hard
+    to read past.
+    """
+    age, meta = api.snapshot_age_hours(data_path)
+    if age is None:
+        print(
+            "  data age: unknown (no meta.json alongside) — if these files "
+            "were saved by hand, check the prices are today's"
+        )
+        return
+    deadline = meta.get("next_deadline") or "unknown"
+    print(
+        f"  data age: {age:.1f}h | GW{meta.get('next_event')} deadline "
+        f"{deadline} | {meta.get('player_count')} players"
+    )
+    if age > api.STALE_AFTER_HOURS:
+        print(
+            f"\n  *** STALE DATA: this snapshot is {age:.1f} hours old. "
+            f"Prices change daily, so anything below may not fit the budget.\n"
+            f"  *** Refresh it before acting: the Refresh FPL data workflow "
+            f"runs on a schedule and can be triggered by hand.\n"
+        )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="fpl-picker", description="AI-assisted FPL team picker"
@@ -273,9 +302,11 @@ def main(argv=None):
         except (OSError, ValueError) as exc:
             sys.exit(f"error: {exc}")
         print(f"Built snapshot from {args.from_files[0]} and {args.from_files[1]}")
+        report_snapshot_age(args.from_files[0])
     elif args.data:
         data = api.load_data(args.data)
         print(f"Loaded data snapshot from {args.data}")
+        report_snapshot_age(args.data)
     else:
         print("Fetching live data from the FPL API...")
         data = api.fetch_data(with_history=args.with_history)
@@ -484,6 +515,12 @@ def log_predictions(players, gw, horizon, directory="predictions"):
                     "id": p.id, "name": p.name, "team": p.team,
                     "position": p.position, "price": p.price,
                     "score": p.score, "per_gw": p.per_gw,
+                    # Logged so the accuracy report can score us against
+                    # baselines a sensible manager would actually use, rather
+                    # than against a price regression that beats nobody.
+                    "ppg": p.stats.get("ppg"),
+                    "form": p.stats.get("form"),
+                    "ep_next": p.stats.get("ep_next"),
                 }
                 for p in players
             ],

@@ -7,10 +7,13 @@ name: Refresh FPL data
 
 on:
   schedule:
-    # Twice a day. Prices change once daily, overnight UK time, so 07:13 UTC
-    # catches the new prices and 17:13 UTC catches pre-deadline team news.
-    # Odd minutes because schedules on the hour are the most contended.
-    - cron: "13 7,17 * * *"
+    # Six times a day. The 02:07 run lands just after FPL's ~01:30 UTC price
+    # change lock, and the rest keep the snapshot inside the six-hour window
+    # the CLI treats as fresh. Minute :07 because GitHub's scheduler is most
+    # congested on the hour — scheduled runs are best-effort and can be
+    # delayed or skipped, so trigger this by hand before a deadline rather
+    # than trusting the schedule to have landed.
+    - cron: "7 2,6,10,14,18,22 * * *"
   workflow_dispatch:
 
 permissions:
@@ -40,7 +43,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/bootstrap.json data/fixtures.json
+          git add data/bootstrap.json data/fixtures.json data/meta.json
           if git diff --quiet --cached; then
             echo "No change in the FPL data; nothing to commit."
             exit 0
