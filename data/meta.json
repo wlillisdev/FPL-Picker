@@ -1,9 +1,9 @@
 {
- "current_event": 7,
- "fetched_at": "2026-10-23T14:57:39Z",
+ "current_event": 8,
+ "fetched_at": "2026-10-23T21:19:48Z",
  "fixture_count": 380,
- "next_deadline": "2026-10-23T17:30:00Z",
- "next_event": 8,
+ "next_deadline": "2026-10-31T11:00:00Z",
+ "next_event": 9,
  "player_count": 668,
  "source": "https://fantasy.premierleague.com/api"
 }
